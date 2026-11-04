@@ -1,0 +1,111 @@
+// Steps 4-5: remote access, and unlocking & devices (tabs).
+
+import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette, TabWidget, ScrollView } from "std-widgets.slint";
+import { KeysSection, DevicesSection, MailSection } from "extras.slint";
+import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
+import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
+import { Wiz } from "../store.slint";
+
+export component AccessPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Remote access"; }
+    Muted { text: "How Grok reaches the broker, and how long a sign-in stays usable."; }
+    Card {
+        Section { text: "Reach"; }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button { text: "Tailscale Funnel"; checkable: true; checked: Wiz.tunnel-mode == 0; enabled: !Wiz.locked; clicked => { Wiz.tunnel-mode = 0; } }
+            Button { text: "My own HTTPS hostname"; checkable: true; checked: Wiz.tunnel-mode == 1; enabled: !Wiz.locked; clicked => { Wiz.tunnel-mode = 1; } }
+            Button { text: "This PC only"; checkable: true; checked: Wiz.tunnel-mode == 2; enabled: !Wiz.locked; clicked => { Wiz.tunnel-mode = 2; } }
+        }
+        if Wiz.tunnel-mode == 0: HorizontalLayout {
+            spacing: 10px;
+            Badge { text: Wiz.ts-ready ? "Ready" : "Not ready"; tint: Wiz.ts-ready ? Theme.ok : Theme.bad; }
+            Muted { text: Wiz.ts-detail; vertical-alignment: center; }
+            Button { text: "Refresh"; clicked => { Wiz.refresh-tailscale(); } }
+        }
+        if Wiz.tunnel-mode == 0: Muted { text: "Funnel, not Serve: Grok calls from Cursor's servers, which aren't on your tailnet. It's only switched on while the broker runs."; font-size: 12px; }
+        if Wiz.tunnel-mode == 1: Field { label: "Hostname"; LineEdit { text <=> Wiz.own-host; placeholder-text: "pass.example.com"; enabled: !Wiz.locked; } }
+        if Wiz.tunnel-mode == 2: Muted { text: "Only assistants running on this PC can connect."; }
+    }
+    Card {
+        vertical-stretch: 1;
+        Section { text: "Safety"; }
+        Field { label: "Port"; SpinBox { minimum: 1024; maximum: 65535; value <=> Wiz.port; enabled: !Wiz.locked; } }
+        Field { label: "Each Allow lasts (min)"; SpinBox { minimum: 0; maximum: 120; value <=> Wiz.grant-minutes; enabled: !Wiz.locked; } }
+        Field { label: "Sign out of sites"; Switch { text: "When the broker stops or sits idle"; checked <=> Wiz.clear-sessions; enabled: !Wiz.locked; } }
+        if Wiz.clear-sessions: Field { label: "Idle after (min)"; SpinBox { minimum: 1; maximum: 240; value <=> Wiz.idle-minutes; enabled: !Wiz.locked; } }
+        Field { label: "Browser window"; Switch { text: "Show it, so I can watch"; checked <=> Wiz.show-browser; enabled: !Wiz.locked; } }
+        Muted { text: "Signing out matters: after an approved sign-in, the site stays logged in inside the broker's browser, and an assistant could keep using it without asking again."; font-size: 12px; }
+        Rectangle { vertical-stretch: 1; }
+    }
+    LockBar {
+        state: Wiz.steps[3].state;
+        broker-running: Wiz.running;
+        can-complete: Wiz.access-ok;
+        blocker: Wiz.tunnel-mode == 0 ? "Tailscale isn't ready (see above)." : "Enter your hostname.";
+        complete => { Wiz.complete-step(3); }
+        unlock => { Wiz.confirm-step = 3; }
+    }
+}
+
+export component UnlockSection inherits VerticalLayout {
+    spacing: 8px;
+    Section { text: "Actions"; }
+    if Wiz.unlock-actions.length == 0: Muted { text: "None yet."; }
+    for a in Wiz.unlock-actions: HorizontalLayout {
+        spacing: 12px;
+        height: 46px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: a.name + "  ·  " + a.tool; font-weight: 600; }
+            Muted { text: "item “" + a.item + "” · files in " + a.folders + (a.output != "" ? " · results in " + a.output : "") + (a.returns ? " · result shown to the assistant" : " · result stays on this PC"); font-size: 12px; overflow: elide; }
+        }
+        if !Wiz.locked: Button { text: "Remove"; clicked => { Wiz.unlock-remove(a.name); } }
+    }
+    if !Wiz.locked: Rectangle { height: 1px; background: Theme.line; }
+    if !Wiz.locked: VerticalLayout {
+        spacing: 8px;
+        Section { text: "Add an action"; }
+        Field { label: "Name"; LineEdit { text <=> Wiz.ua-name; placeholder-text: "e.g. tax-archives"; } }
+        Field { label: "Tool"; ComboBox { model: Wiz.unlock-preset-labels; current-index <=> Wiz.ua-preset; } }
+        if Wiz.unlock-preset-notes.length > Wiz.ua-preset: Muted { text: Wiz.unlock-preset-notes[Wiz.ua-preset]; font-size: 12px; }
+        Field { label: "Passphrase item"; ComboBox { model: Wiz.unlock-items; current-index <=> Wiz.ua-item; } }
+        Field { label: "Files in folder"; LineEdit { text <=> Wiz.ua-folder; placeholder-text: "~/Secure"; } }
+        Field { label: "Results go to"; LineEdit { text <=> Wiz.ua-output; placeholder-text: "~/Secure/unlocked (not needed for list tools)"; } }
+        Field { label: "Show result to assistant"; Switch { text: "Return the decrypted content (text files only)"; checked <=> Wiz.ua-return; } }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Button { text: "Add action"; primary: true; enabled: Wiz.ua-name != "" && Wiz.ua-folder != "" && !Wiz.busy; clicked => { Wiz.unlock-add(); } }
+            Muted { text: Wiz.unlock-note; vertical-alignment: center; }
+        }
+    }
+    Rectangle { vertical-stretch: 1; }
+}
+
+export component UnlockPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Unlocking & devices (optional)"; }
+    Muted { text: "Everything here is optional, and each part is granted per bot later. Assistants only ever name an action; you approve each use, and secrets never leave this PC except to the device you chose."; }
+    Card {
+        vertical-stretch: 1;
+        TabWidget {
+            Tab { title: "Files"; ScrollView { VerticalLayout { padding: 8px; UnlockSection { } } } }
+            Tab { title: "Encryption keys"; ScrollView { VerticalLayout { padding: 8px; KeysSection { } } } }
+            Tab { title: "Home devices"; ScrollView { VerticalLayout { padding: 8px; DevicesSection { } } } }
+            Tab { title: "Email codes"; ScrollView { VerticalLayout { padding: 8px; MailSection { } } } }
+        }
+        if Wiz.extras-note != "": Muted { text: Wiz.extras-note; font-size: 12px; }
+    }
+    LockBar {
+        state: Wiz.steps[4].state;
+        broker-running: Wiz.running;
+        can-complete: true;
+        complete-text: Wiz.unlock-actions.length == 0 ? "Skip and lock" : "Confirm and lock";
+        complete => { Wiz.complete-step(4); }
+        unlock => { Wiz.confirm-step = 4; }
+    }
+}

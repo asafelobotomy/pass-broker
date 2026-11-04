@@ -1,0 +1,172 @@
+// Composite widgets: sidebar steps, requirement lines, the lock bar, logs, bots.
+
+import { Button, ListView, Palette, Switch } from "std-widgets.slint";
+import { Theme, Muted } from "theme.slint";
+import { StepItem, CheckRow, BotRow } from "store.slint";
+
+export component StepButton inherits Rectangle {
+    in property <StepItem> item;
+    in property <int> number;
+    in property <bool> selected;
+    callback clicked;
+    height: 58px;
+    border-radius: 8px;
+    background: selected ? Palette.accent-background.with-alpha(0.14) : (ta.has-hover && item.state != 0 ? Theme.hover : transparent);
+    ta := TouchArea {
+        enabled: item.state != 0;
+        mouse-cursor: item.state != 0 ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 12px;
+        alignment: start;
+        Rectangle {
+            width: 30px;
+            height: 30px;
+            y: (parent.height - self.height) / 2;
+            border-radius: 15px;
+            background: item.state == 2 ? Theme.ok : (item.state == 3 ? Theme.warn : (selected ? Palette.accent-background : transparent));
+            border-width: item.state == 2 || item.state == 3 || selected ? 0px : 1.5px;
+            border-color: Theme.muted;
+            Text {
+                text: item.state == 2 ? "✓" : (item.state == 3 ? "✎" : root.number);
+                color: item.state >= 2 || selected ? white : (item.state == 0 ? Theme.muted : Palette.foreground);
+                font-weight: 700;
+                font-size: 14px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: item.title;
+                font-weight: selected ? 700 : 500;
+                color: item.state == 0 ? Theme.muted : Palette.foreground;
+            }
+            Text {
+                text: item.subtitle;
+                font-size: 12px;
+                color: Theme.muted;
+                overflow: elide;
+            }
+        }
+    }
+}
+
+export component CheckLine inherits Rectangle {
+    in property <CheckRow> check;
+    in property <bool> locked;
+    callback fix(string);
+    height: 44px;
+    HorizontalLayout {
+        spacing: 12px;
+        Text {
+            width: 22px;
+            text: root.check.ok ? "✓" : (root.check.required ? "✕" : "!");
+            color: root.check.ok ? Theme.ok : (root.check.required ? Theme.bad : Theme.warn);
+            font-size: 17px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Text { text: root.check.label + (root.check.required ? "" : "  (optional)"); font-weight: 600; }
+            Muted { text: root.check.detail; font-size: 12px; }
+        }
+        if !root.check.ok && root.check.fix != "" && !locked: Button {
+            text: "Install…";
+            clicked => { root.fix(root.check.fix); }
+        }
+    }
+}
+
+export component Field inherits HorizontalLayout {
+    in property <string> label;
+    spacing: 12px;
+    Text {
+        text: root.label;
+        width: 170px;
+        vertical-alignment: center;
+        color: Theme.muted;
+    }
+    @children
+}
+
+export component LockBar inherits Rectangle {
+    in property <int> state;
+    in property <bool> broker-running;
+    in property <bool> can-complete;
+    in property <string> complete-text: "Confirm and lock";
+    in property <string> blocker;
+    callback complete;
+    callback unlock;
+    height: 62px;
+    background: Theme.card;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.line;
+    HorizontalLayout {
+        padding: 12px;
+        padding-left: 18px;
+        spacing: 12px;
+        Text {
+            vertical-alignment: center;
+            text: state == 2 ? "🔒  Completed and locked" : (state == 3 ? "✎  Unlocked for editing. Lock it again when you're done." : (can-complete ? "Ready to lock this step." : blocker));
+            color: state == 2 ? Theme.ok : (state == 3 ? Theme.warn : Theme.muted);
+            font-weight: 600;
+            overflow: elide;
+        }
+        if state == 2: Button {
+            text: broker-running ? "Stop the broker to edit" : "Unlock to edit…";
+            enabled: !broker-running;
+            clicked => { root.unlock(); }
+        }
+        if state != 2: Button {
+            text: root.complete-text;
+            primary: true;
+            enabled: can-complete;
+            clicked => { root.complete(); }
+        }
+    }
+}
+
+export component BotLine inherits HorizontalLayout {
+    in property <BotRow> bot;
+    in property <bool> compact;
+    callback toggle(string, bool);
+    callback forget(string);
+    callback access(string);
+    spacing: 12px;
+    height: 44px;
+    Switch {
+        checked: root.bot.enabled;
+        toggled => { root.toggle(root.bot.name, self.checked); }
+    }
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        Text { text: root.bot.name + (root.bot.enabled ? "" : "  · off"); font-weight: 600; color: root.bot.enabled ? Palette.foreground : Theme.muted; }
+        Muted { text: root.compact ? root.bot.last-seen : "via " + root.bot.via + " · last: " + root.bot.last-action + " · " + root.bot.last-seen; font-size: 12px; overflow: elide; }
+    }
+    Button { text: "Access…"; clicked => { root.access(root.bot.name); } }
+    if !root.compact: Button { text: "Forget"; clicked => { root.forget(root.bot.name); } }
+}
+
+export component LogView inherits Rectangle {
+    in property <[string]> lines;
+    background: Palette.color-scheme == ColorScheme.dark ? #111114 : #f7f7f9;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.line;
+    ListView {
+        for line in lines: Text {
+            text: line;
+            font-family: "monospace";
+            font-size: 12px;
+            x: 8px;
+            width: parent.width - 16px;
+            overflow: elide;
+        }
+    }
+}

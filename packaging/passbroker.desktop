@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Pass Broker
+Comment=Let AI assistants sign in with Proton Pass without seeing your passwords
+Exec=passbroker-wizard
+Icon=passbroker
+Categories=Utility;Security;
+Terminal=false

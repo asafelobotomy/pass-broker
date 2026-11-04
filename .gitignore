@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.pytest_cache/
+.ruff_cache/
+
+# Rust
+wizard/target/
+
+# Local state that must never be committed
+*.tmp
+*.lock.json
+.env
+.env.*
+*.pem
+*.key
+audit.jsonl
+oauth.json
+clients.json
+bots.json

@@ -1,0 +1,140 @@
+// Step 6 and the Control center.
+
+import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette } from "std-widgets.slint";
+import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
+import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
+import { Wiz } from "../store.slint";
+
+export component AssistantsPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Connect assistants"; }
+    Muted { text: "Grok connects itself with OAuth. Start the broker, then ask Grok to add this MCP server by URL, with OAuth and no token or header. When its sign-in page opens, type the code from the notification on this PC."; }
+    Card {
+        HorizontalLayout {
+            spacing: 10px;
+            Text { text: "Server URL"; vertical-alignment: center; color: Theme.muted; }
+            LineEdit { text: Wiz.mcp-url; read-only: true; font-size: 13px; }
+            Button { text: "Copy"; clicked => { Wiz.copy(Wiz.mcp-url, false); } }
+            if !Wiz.running: Button { text: "Start broker"; primary: true; enabled: Wiz.setup-done; clicked => { Wiz.start-broker(); } }
+            if Wiz.running: Button { text: "Connect an app"; primary: true; clicked => { Wiz.open-pairing(); } }
+            if Wiz.running: Badge { text: "Broker " + Wiz.broker-state; tint: Theme.ok; }
+        }
+        if !Wiz.setup-done: Muted { text: "Lock steps 1–5 first, then start the broker here."; font-size: 12px; }
+        Muted { text: Wiz.pairing-note != "" ? Wiz.pairing-note : "Press Connect an app right before asking Grok to connect: sign-ins are refused otherwise, so a link someone else sends you can't start one."; font-size: 12px; }
+    }
+    Card {
+        vertical-stretch: 1;
+        Section { text: "Connected apps"; }
+        if Wiz.connections.length == 0: Muted { text: "None yet."; }
+        for c in Wiz.connections: HorizontalLayout {
+            spacing: 12px;
+            height: 40px;
+            Badge { text: c.active ? "active" : "expired"; tint: c.active ? Theme.ok : Theme.muted; y: 9px; }
+            Text { text: c.name; font-weight: 600; vertical-alignment: center; width: 120px; overflow: elide; }
+            Muted { text: c.app + " · connected " + c.created + " · last used " + c.last-used; vertical-alignment: center; overflow: elide; }
+            Button { text: "Revoke"; clicked => { Wiz.revoke(c.id); } }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+        Section { text: "Bots"; }
+        Muted { text: "Every Grok bot shares the connection above and names itself on each call. A new bot can use nothing until you grant it with Access…. Names are self-reported, so this guards against mistakes, not a bot that lies: Revoke is the real off switch."; font-size: 12px; }
+        if Wiz.bots.length == 0: Muted { text: "None yet: bots appear here the first time they call."; }
+        for b in Wiz.bots: BotLine {
+            bot: b;
+            toggle(n, on) => { Wiz.toggle-bot(n, on); }
+                access(n) => { Wiz.open-access(n); }
+            forget(n) => { Wiz.forget-bot(n); }
+        }
+        Rectangle { height: 1px; background: Theme.line; }
+        Section { text: "Local assistants (fixed token)"; }
+        Muted { text: "Only for apps on this PC that can send a header themselves, such as Claude. Never give these to Grok."; font-size: 12px; }
+        for n in Wiz.clients: HorizontalLayout {
+            spacing: 12px;
+            height: 36px;
+            Text { text: n; vertical-alignment: center; font-weight: 600; }
+            Rectangle { horizontal-stretch: 1; }
+            Button { text: "Remove"; enabled: !Wiz.locked; clicked => { Wiz.remove-client(n); } }
+        }
+        if !Wiz.locked: HorizontalLayout {
+            spacing: 10px;
+            newname := LineEdit { placeholder-text: "name, e.g. claude"; width: 220px; }
+            Button { text: "Add local assistant"; enabled: newname.text != ""; clicked => { Wiz.add-client(newname.text); newname.text = ""; } }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+    LockBar {
+        state: Wiz.steps[5].state;
+        broker-running: false;
+        can-complete: Wiz.assistants-ok;
+        complete-text: "Finish setup and lock";
+        blocker: "Connect Grok (or add a local assistant) to finish.";
+        complete => { Wiz.complete-step(5); }
+        unlock => { Wiz.confirm-step = 5; }
+    }
+}
+
+export component ControlPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Control center"; }
+    Card {
+        HorizontalLayout {
+            spacing: 12px;
+            Badge { text: Wiz.broker-state; tint: Wiz.running ? Theme.ok : Theme.muted; y: 6px; }
+            Text { text: Wiz.running ? Wiz.broker-url : "The broker is stopped. Nothing can reach it."; vertical-alignment: center; overflow: elide; }
+            Rectangle { horizontal-stretch: 1; }
+            if Wiz.running && Wiz.broker-url != "": Button { text: "Test from internet"; clicked => { Wiz.probe(); } }
+            if !Wiz.running: Button { text: "Start broker"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.start-broker(); } }
+            if Wiz.running: Button { text: "Stop"; clicked => { Wiz.stop-broker(); } }
+            Button { text: "Emergency stop"; clicked => { Wiz.emergency-stop(); } }
+        }
+        if Wiz.probe-result != "": Muted { text: Wiz.probe-result; font-size: 12px; }
+        Muted { text: "Emergency stop revokes every connected app, stops the broker and Funnel, and signs the browser out of everything."; font-size: 12px; }
+    }
+    HorizontalLayout {
+        spacing: Theme.gap;
+        vertical-stretch: 1;
+        Card {
+            horizontal-stretch: 3;
+            Section { text: "Activity"; }
+            ListView {
+                for a in Wiz.audit: Rectangle {
+                    height: 30px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Muted { text: a.ts; width: 130px; font-size: 12px; vertical-alignment: center; }
+                        Text { text: a.who; width: 130px; overflow: elide; vertical-alignment: center; font-weight: 600; }
+                        Text { text: a.event; width: 140px; overflow: elide; vertical-alignment: center; }
+                        Muted { text: a.host + "  " + a.item; overflow: elide; vertical-alignment: center; }
+                        Text { text: a.result; color: a.result == "denied" || a.result == "refused" ? Theme.bad : Theme.ok; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+        Card {
+            horizontal-stretch: 2;
+            Section { text: "Bots"; }
+            if Wiz.bots.length == 0: Muted { text: "None yet."; }
+            for b in Wiz.bots: BotLine {
+                bot: b;
+                compact: true;
+                toggle(n, on) => { Wiz.toggle-bot(n, on); }
+                access(n) => { Wiz.open-access(n); }
+            }
+            Rectangle { height: 1px; background: Theme.line; }
+            Section { text: "Connected apps"; }
+            if Wiz.connections.length == 0: Muted { text: "None."; }
+            for c in Wiz.connections: HorizontalLayout {
+                spacing: 10px;
+                height: 38px;
+                Text { text: c.name; font-weight: 600; vertical-alignment: center; overflow: elide; }
+                Muted { text: c.last-used; vertical-alignment: center; }
+                Button { text: "Revoke"; clicked => { Wiz.revoke(c.id); } }
+            }
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+    Card {
+        height: 180px;
+        Section { text: "Broker log"; }
+        LogView { lines: Wiz.log-lines; }
+    }
+}

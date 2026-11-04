@@ -1,0 +1,175 @@
+// Everything the wizard shows and every action it can take, shared by all pages.
+// Rust drives it through `ui.global::<Wiz>()`.
+
+export struct StepItem {
+    title: string,
+    subtitle: string,
+    // 0 = not reachable yet, 1 = to do, 2 = done and locked, 3 = unlocked for editing
+    state: int,
+}
+
+export struct CheckRow { label: string, detail: string, ok: bool, required: bool, fix: string }
+export struct LoginRow { title: string, sites: string, user: string, totp: string, fillable: bool }
+export struct ConnRow { id: string, name: string, app: string, created: string, last-used: string, active: bool }
+export struct BotRow { name: string, enabled: bool, first-seen: string, last-seen: string, last-action: string, via: string }
+export struct AuditRow { ts: string, who: string, event: string, item: string, host: string, result: string }
+
+export struct UnlockAction { name: string, tool: string, item: string, folders: string, output: string, returns: bool }
+
+export struct KeyRow { name: string, item: string, note: string }
+export struct DeviceRow { name: string, kind: string, target: string, item: string, returns: bool }
+export struct AccessItem { kind: string, label: string, name: string, on: bool }
+
+export global Wiz {
+
+    // navigation
+    in-out property <int> current: 0;
+    in property <[StepItem]> steps;
+    in property <bool> setup-done;
+    in property <bool> busy;
+    in property <string> busy-text;
+    in property <string> toast;
+    in property <bool> toast-error;
+    callback dismiss-toast;
+    callback go(int);
+
+    // locking
+    callback complete-step(int);
+    callback unlock-step(int);
+    in property <[string]> unlock-warnings;
+    in-out property <int> confirm-step: -1;
+
+    // 1 requirements
+    in property <[CheckRow]> checks;
+    in property <bool> requirements-ok;
+    callback recheck;
+    callback fix(string);
+
+    // 2 token
+    in property <bool> token-stored;
+    in property <string> keyring;
+    in property <string> session-label;
+    in property <string> login-url;
+    in property <string> login-state;
+    in-out property <int> token-mode: 0;
+    in-out property <string> token-name: "passbroker";
+    in-out property <int> token-expiry: 2;
+    in property <[string]> expirations: ["1d", "1w", "1m", "3m", "6m", "1y"];
+    callback sign-in;
+    callback open-url(string);
+    callback create-token;
+    callback save-pasted(string);
+    callback remove-token;
+
+    // 3 vault
+    in-out property <string> vault-name: "Agent";
+    in property <[LoginRow]> logins;
+    in property <string> vault-summary;
+    in property <bool> vault-ok;
+    callback check-vault;
+
+    // 4 remote access
+    in-out property <int> tunnel-mode: 0;
+    in-out property <string> own-host;
+    in property <string> ts-detail;
+    in property <bool> ts-ready;
+    in-out property <int> port: 8787;
+    in-out property <int> grant-minutes: 2;
+    in-out property <bool> show-browser: true;
+    in-out property <bool> clear-sessions: true;
+    in-out property <int> idle-minutes: 15;
+    in property <bool> access-ok;
+    callback refresh-tailscale;
+
+    // 5 assistants
+    in property <string> mcp-url;
+    in property <[ConnRow]> connections;
+    in property <[string]> clients;
+    in property <[BotRow]> bots;
+    in property <bool> assistants-ok;
+    in property <string> new-token;
+    in property <string> new-token-name;
+    in property <string> copy-note;
+    callback revoke(string);
+    callback toggle-bot(string, bool);
+    callback forget-bot(string);
+    callback add-client(string);
+    callback remove-client(string);
+    callback copy(string, bool);
+    callback close-token;
+
+    // control center
+    in property <string> broker-state: "stopped";
+    in property <string> broker-url;
+    in property <[string]> log-lines;
+    in property <[AuditRow]> audit;
+    in property <string> probe-result;
+    callback start-broker;
+    callback stop-broker;
+    callback emergency-stop;
+    callback probe;
+
+    out property <bool> running: broker-state != "stopped";
+    out property <bool> locked: steps.length > current && steps[current].state == 2;
+
+    // 5 file unlocking
+    in property <[UnlockAction]> unlock-actions;
+    in property <[string]> unlock-preset-labels;
+    in property <[string]> unlock-preset-notes;
+    in property <[string]> unlock-items;
+    in property <string> unlock-note;
+    in-out property <string> ua-name;
+    in-out property <int> ua-preset: 0;
+    in-out property <int> ua-item: 0;
+    in-out property <string> ua-folder;
+    in-out property <string> ua-output;
+    in-out property <bool> ua-return: false;
+    callback unlock-refresh;
+    callback unlock-add;
+    callback unlock-remove(string);
+
+    // 5b keys, devices, email codes
+    in property <[KeyRow]> keys;
+    in property <[DeviceRow]> devices;
+    in property <[string]> device-items;
+    in-out property <string> k-name;
+    in-out property <int> k-item: 0;
+    in-out property <string> k-note;
+    in-out property <string> d-name;
+    in-out property <int> d-kind: 0;
+    in-out property <string> d-mac;
+    in-out property <string> d-host;
+    in-out property <string> d-user;
+    in-out property <string> d-command;
+    in-out property <string> d-url;
+    in-out property <int> d-auth: 0;
+    in-out property <string> d-username;
+    in-out property <string> d-body;
+    in-out property <bool> d-insecure: false;
+    in-out property <int> d-item: 0;
+    in-out property <bool> d-return: false;
+    in-out property <string> d-description;
+    in-out property <int> mail-item: 0;
+    in-out property <string> mail-host: "127.0.0.1";
+    in-out property <int> mail-port: 1143;
+    in-out property <int> mail-age: 10;
+    in property <string> extras-note;
+    callback key-add;
+    callback key-remove(string);
+    callback device-add;
+    callback device-remove(string);
+    callback mail-save;
+
+    // bot access editor (open when access-bot != "")
+    in property <string> access-bot;
+    in property <[AccessItem]> access-items;
+    in-out property <bool> access-email: false;
+    callback open-access(string);
+    callback access-toggle(int, bool);
+    callback save-access;
+    callback close-access;
+
+    // pairing
+    in property <string> pairing-note;
+    callback open-pairing;
+}

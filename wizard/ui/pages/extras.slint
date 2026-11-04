@@ -1,0 +1,79 @@
+// Step 5 tabs beyond file unlocking: encryption keys, home-device actions, email codes.
+
+import { Button, LineEdit, ComboBox, SpinBox, Switch, ScrollView } from "std-widgets.slint";
+import { Theme, Muted, Section } from "../theme.slint";
+import { Field } from "../widgets.slint";
+import { Wiz } from "../store.slint";
+
+export component KeysSection inherits VerticalLayout {
+    spacing: 8px;
+    Muted { text: "Bots send text here to encrypt (no approval needed) or ciphertext to decrypt (you approve). The passphrase stays in your vault, so encrypted files on the bots' computer have no key beside them."; font-size: 12px; }
+    if Wiz.keys.length == 0: Muted { text: "No keys yet."; }
+    for k in Wiz.keys: HorizontalLayout {
+        spacing: 12px;
+        height: 40px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: k.name; font-weight: 600; }
+            Muted { text: "item “" + k.item + "”" + (k.note != "" ? " · " + k.note : ""); font-size: 12px; overflow: elide; }
+        }
+        if !Wiz.locked: Button { text: "Remove"; clicked => { Wiz.key-remove(k.name); } }
+    }
+    if !Wiz.locked: VerticalLayout {
+        spacing: 8px;
+        Rectangle { height: 1px; background: Theme.line; }
+        Section { text: "Add a key"; }
+        Field { label: "Name"; LineEdit { text <=> Wiz.k-name; placeholder-text: "e.g. ledger"; } }
+        Field { label: "Passphrase item"; ComboBox { model: Wiz.unlock-items; current-index <=> Wiz.k-item; } }
+        Field { label: "Note for bots"; LineEdit { text <=> Wiz.k-note; placeholder-text: "e.g. the finance ledger"; } }
+        HorizontalLayout { alignment: start; Button { text: "Add key"; primary: true; enabled: Wiz.k-name != "" && !Wiz.busy; clicked => { Wiz.key-add(); } } }
+    }
+}
+
+export component DevicesSection inherits VerticalLayout {
+    spacing: 8px;
+    Muted { text: "Optional. Things bots may trigger on your home server and devices, never on this PC. You fix the command, address and password; bots only name the action and see done or failed."; font-size: 12px; }
+    if Wiz.devices.length == 0: Muted { text: "No device actions yet."; }
+    for d in Wiz.devices: HorizontalLayout {
+        spacing: 12px;
+        height: 40px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: d.name + "  ·  " + d.kind; font-weight: 600; }
+            Muted { text: d.target + (d.item != "" ? " · item “" + d.item + "”" : "") + (d.returns ? " · output shown to bots" : ""); font-size: 12px; overflow: elide; }
+        }
+        if !Wiz.locked: Button { text: "Remove"; clicked => { Wiz.device-remove(d.name); } }
+    }
+    if !Wiz.locked: VerticalLayout {
+        spacing: 8px;
+        Rectangle { height: 1px; background: Theme.line; }
+        Section { text: "Add a device action"; }
+        Field { label: "Name"; LineEdit { text <=> Wiz.d-name; placeholder-text: "e.g. wake-nas"; } }
+        Field { label: "Kind"; ComboBox { model: ["Wake-on-LAN", "SSH command on a server", "HTTP call to a device"]; current-index <=> Wiz.d-kind; } }
+        Field { label: "What it does"; LineEdit { text <=> Wiz.d-description; placeholder-text: "shown to bots and in approvals"; } }
+        if Wiz.d-kind == 0: Field { label: "MAC address"; LineEdit { text <=> Wiz.d-mac; placeholder-text: "aa:bb:cc:dd:ee:ff"; } }
+        if Wiz.d-kind == 1: Field { label: "Server"; LineEdit { text <=> Wiz.d-host; placeholder-text: "homeserver (from your ~/.ssh/config or a name)"; } }
+        if Wiz.d-kind == 1: Field { label: "User"; LineEdit { text <=> Wiz.d-user; placeholder-text: "optional"; } }
+        if Wiz.d-kind == 1: Field { label: "Command"; LineEdit { text <=> Wiz.d-command; placeholder-text: "e.g. sudo -S systemctl start backup"; } }
+        if Wiz.d-kind == 2: Field { label: "URL"; LineEdit { text <=> Wiz.d-url; placeholder-text: "https://router.lan/api/wake"; } }
+        if Wiz.d-kind == 2: Field { label: "Password goes"; ComboBox { model: ["nowhere", "basic auth", "bearer token", "into the body as {secret}"]; current-index <=> Wiz.d-auth; } }
+        if Wiz.d-kind == 2 && Wiz.d-auth == 1: Field { label: "Username"; LineEdit { text <=> Wiz.d-username; } }
+        if Wiz.d-kind == 2: Field { label: "Body (JSON)"; LineEdit { text <=> Wiz.d-body; placeholder-text: "{\"password\": \"{secret}\"}"; } }
+        if Wiz.d-kind == 2: Field { label: "Self-signed device"; Switch { text: "Don't verify its certificate"; checked <=> Wiz.d-insecure; } }
+        if Wiz.d-kind != 0: Field { label: "Password item"; ComboBox { model: Wiz.device-items; current-index <=> Wiz.d-item; } }
+        if Wiz.d-kind != 0: Field { label: "Show output to bots"; Switch { text: "Return the command's or device's reply"; checked <=> Wiz.d-return; } }
+        HorizontalLayout { alignment: start; Button { text: "Add device action"; primary: true; enabled: Wiz.d-name != "" && !Wiz.busy; clicked => { Wiz.device-add(); } } }
+    }
+}
+
+export component MailSection inherits VerticalLayout {
+    spacing: 8px;
+    Muted { text: "Lets bots finish sign-ins that email a code: the broker reads the newest code from the site's domain through Proton Mail Bridge on this PC and types it in. Bots never see the code or your mail. Grant it per bot."; font-size: 12px; }
+    Field { label: "Bridge login item"; ComboBox { model: Wiz.device-items; current-index <=> Wiz.mail-item; enabled: !Wiz.locked; } }
+    Muted { text: "A vault item with your Bridge username and the password Bridge shows under its account settings (not your Proton password)."; font-size: 12px; }
+    Field { label: "Bridge IMAP"; HorizontalLayout { spacing: 8px; LineEdit { text <=> Wiz.mail-host; enabled: !Wiz.locked; } SpinBox { minimum: 1; maximum: 65535; value <=> Wiz.mail-port; enabled: !Wiz.locked; } } }
+    Field { label: "Only codes newer than (min)"; SpinBox { minimum: 1; maximum: 60; value <=> Wiz.mail-age; enabled: !Wiz.locked; } }
+    if !Wiz.locked: HorizontalLayout { alignment: start; Button { text: "Save email-code settings"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.mail-save(); } } }
+}

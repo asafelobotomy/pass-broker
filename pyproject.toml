@@ -1,0 +1,32 @@
+[project]
+name = "passbroker"
+version = "0.1.0"
+description = "Let AI assistants sign in, unlock files and run home-device actions with Proton Pass secrets, without ever seeing them."
+readme = "README.md"
+authors = [
+    { name = "asafelobotomy", email = "213836723+asafelobotomy@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "keyring>=25.7.0",
+    "mcp[cli]>=2.3.0",
+    "playwright>=1.64.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.4.1.post1",
+]
+
+[project.scripts]
+passbroker = "passbroker.cli:main"
+
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

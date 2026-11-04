@@ -1,0 +1,60 @@
+// Colours, spacing and the small building blocks every page uses.
+
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    out property <length> radius: 10px;
+    out property <length> gap: 14px;
+    out property <color> ok: #2e9e5b;
+    out property <color> bad: #d64545;
+    out property <color> warn: #d08a1c;
+    out property <color> muted: Palette.color-scheme == ColorScheme.dark ? #a1a1aa : #6b6b76;
+    out property <color> card: Palette.color-scheme == ColorScheme.dark ? #1f1f24 : #ffffff;
+    out property <color> sidebar: Palette.color-scheme == ColorScheme.dark ? #17171b : #f1f1f4;
+    out property <color> hover: Palette.color-scheme == ColorScheme.dark ? #2a2a31 : #e6e6ec;
+    out property <color> line: Palette.color-scheme == ColorScheme.dark ? #33333b : #e2e2e8;
+}
+
+export component Muted inherits Text {
+    color: Theme.muted;
+    wrap: word-wrap;
+}
+
+export component Heading inherits Text {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+export component Section inherits Text {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+export component Card inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.radius;
+    border-width: 1px;
+    border-color: Theme.line;
+    VerticalLayout {
+        padding: 18px;
+        spacing: 10px;
+        @children
+    }
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <color> tint: Theme.muted;
+    border-radius: 9px;
+    background: tint.with-alpha(0.15);
+    height: 22px;
+    width: t.preferred-width + 16px;
+    t := Text {
+        text: root.text;
+        color: root.tint;
+        font-size: 12px;
+        font-weight: 600;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}

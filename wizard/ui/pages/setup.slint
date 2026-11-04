@@ -1,0 +1,152 @@
+// Steps 1-3: requirements, the Proton Pass token, the vault check.
+
+import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette } from "std-widgets.slint";
+import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
+import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
+import { Wiz } from "../store.slint";
+
+export component RequirementsPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Requirements"; }
+    Muted { text: "Everything the broker needs on this PC. Fix anything marked with a cross."; }
+    Card {
+        vertical-stretch: 1;
+        for c in Wiz.checks: CheckLine {
+            check: c;
+            locked: Wiz.locked;
+            fix(what) => { Wiz.fix(what); }
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: start;
+            Button { text: "Check again"; enabled: !Wiz.busy; clicked => { Wiz.recheck(); } }
+        }
+    }
+    LockBar {
+        state: Wiz.steps[0].state;
+        broker-running: Wiz.running;
+        can-complete: Wiz.requirements-ok;
+        blocker: "Fix the required items above.";
+        complete => { Wiz.complete-step(0); }
+        unlock => { Wiz.confirm-step = 0; }
+    }
+}
+
+export component TokenPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Proton Pass token"; }
+    Muted { text: "The broker reads one vault with an agent token: it can only view that vault, and Proton logs every read with the broker's reason. The token goes straight into your keyring and is never shown."; }
+    Card {
+        HorizontalLayout {
+            spacing: 10px;
+            Badge { text: Wiz.token-stored ? "Token saved" : "No token yet"; tint: Wiz.token-stored ? Theme.ok : Theme.warn; }
+            Muted { text: Wiz.token-stored ? "In your keyring (" + Wiz.keyring + ")" : ""; vertical-alignment: center; }
+            Rectangle { horizontal-stretch: 1; }
+            if Wiz.token-stored && !Wiz.locked: Button { text: "Remove token"; clicked => { Wiz.remove-token(); } }
+        }
+        if Wiz.session-label != "": Muted { text: "pass-cli is signed in as: " + Wiz.session-label; font-size: 12px; }
+    }
+    if !Wiz.locked: Card {
+        vertical-stretch: 1;
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button { text: "Create one for me"; checkable: true; checked: Wiz.token-mode == 0; clicked => { Wiz.token-mode = 0; } }
+            Button { text: "I already have a token"; checkable: true; checked: Wiz.token-mode == 1; clicked => { Wiz.token-mode = 1; } }
+        }
+        if Wiz.token-mode == 0: VerticalLayout {
+            spacing: 10px;
+            Section { text: "1. Sign in to Proton as yourself"; }
+            Muted { text: "Needed once, to create the agent. If pass-cli is signed in as another agent, it's signed out first (the agent isn't deleted). You're signed out again afterwards."; font-size: 13px; }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                Button { text: "Sign in…"; enabled: !Wiz.busy; clicked => { Wiz.sign-in(); } }
+                if Wiz.login-url != "": Button { text: "Open sign-in page"; clicked => { Wiz.open-url(Wiz.login-url); } }
+                Muted { text: Wiz.login-state; vertical-alignment: center; }
+            }
+            Section { text: "2. Create the agent token"; }
+            Field { label: "Agent name"; LineEdit { text <=> Wiz.token-name; } }
+            Field { label: "Expires after"; ComboBox { model: Wiz.expirations; current-index <=> Wiz.token-expiry; } }
+            Field { label: "Vault"; Text { text: Wiz.vault-name + "  (set in step 3)"; vertical-alignment: center; } }
+            HorizontalLayout {
+                alignment: start;
+                Button { text: "Create and save"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.create-token(); } }
+            }
+        }
+        if Wiz.token-mode == 1: VerticalLayout {
+            spacing: 10px;
+            Muted { text: "Paste an agent or access token (pst_…). It's hidden as you type and goes straight to the keyring."; font-size: 13px; }
+            HorizontalLayout {
+                spacing: 10px;
+                pasted := LineEdit { input-type: password; placeholder-text: "pst_…"; }
+                Button {
+                    text: "Save to keyring";
+                    primary: true;
+                    enabled: pasted.text != "" && !Wiz.busy;
+                    clicked => { Wiz.save-pasted(pasted.text); pasted.text = ""; }
+                }
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+    if Wiz.locked: Rectangle { vertical-stretch: 1; }
+    LockBar {
+        state: Wiz.steps[1].state;
+        broker-running: Wiz.running;
+        can-complete: Wiz.token-stored;
+        blocker: "Save a token to continue.";
+        complete => { Wiz.complete-step(1); }
+        unlock => { Wiz.confirm-step = 1; }
+    }
+}
+
+export component VaultPage inherits VerticalLayout {
+    spacing: Theme.gap;
+    Heading { text: "Check the vault"; }
+    Muted { text: "Signs in with the saved token and lists what assistants could use. No passwords are read. Logins need a saved website to be filled."; }
+    Card {
+        vertical-stretch: 1;
+        HorizontalLayout {
+            spacing: 10px;
+            Text { text: "Vault"; vertical-alignment: center; color: Theme.muted; }
+            LineEdit { text <=> Wiz.vault-name; enabled: !Wiz.locked; width: 220px; }
+            Button { text: "Check"; primary: !Wiz.locked; enabled: !Wiz.busy; clicked => { Wiz.check-vault(); } }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        if Wiz.vault-summary != "": Muted { text: Wiz.vault-summary; }
+        Rectangle {
+            height: 32px;
+            HorizontalLayout {
+                spacing: 10px;
+                Text { text: "Login"; width: 26%; font-weight: 600; color: Theme.muted; }
+                Text { text: "Websites"; width: 34%; font-weight: 600; color: Theme.muted; }
+                Text { text: "Username"; width: 20%; font-weight: 600; color: Theme.muted; }
+                Text { text: "2FA"; width: 6%; font-weight: 600; color: Theme.muted; }
+                Text { text: "Fillable"; font-weight: 600; color: Theme.muted; }
+            }
+        }
+        ListView {
+            vertical-stretch: 1;
+            for l in Wiz.logins: Rectangle {
+                height: 36px;
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text { text: l.title; width: 26%; overflow: elide; vertical-alignment: center; }
+                    Text { text: l.sites; width: 34%; overflow: elide; vertical-alignment: center; }
+                    Text { text: l.user; width: 20%; overflow: elide; vertical-alignment: center; }
+                    Text { text: l.totp; width: 6%; vertical-alignment: center; }
+                    Text { text: l.fillable ? "✓ yes" : "no: save its website"; color: l.fillable ? Theme.ok : Theme.warn; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+    LockBar {
+        state: Wiz.steps[2].state;
+        broker-running: Wiz.running;
+        can-complete: Wiz.vault-ok;
+        blocker: "Check the vault: at least one login needs a website.";
+        complete => { Wiz.complete-step(2); }
+        unlock => { Wiz.confirm-step = 2; }
+    }
+}

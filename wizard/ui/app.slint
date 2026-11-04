@@ -1,0 +1,207 @@
+// Pass Broker setup wizard.
+//
+// Six steps, each locked once completed and only editable after "Unlock"
+// plus a confirmation. The Control center (start/stop, connected apps, bots,
+// activity) opens once the required steps are done. Revoking is never locked.
+
+import { Button, CheckBox, LineEdit, ListView, Palette, Spinner, Switch } from "std-widgets.slint";
+import { Theme, Muted, Heading } from "theme.slint";
+import { StepButton } from "widgets.slint";
+import { Wiz, StepItem, CheckRow, LoginRow, ConnRow, AuditRow, BotRow, UnlockAction, KeyRow, DeviceRow, AccessItem } from "store.slint";
+import { RequirementsPage, TokenPage, VaultPage } from "pages/setup.slint";
+import { AccessPage, UnlockPage } from "pages/access.slint";
+import { AssistantsPage, ControlPage } from "pages/assistants.slint";
+
+export { Wiz, StepItem, CheckRow, LoginRow, ConnRow, AuditRow, BotRow, UnlockAction, KeyRow, DeviceRow, AccessItem }
+
+export component AppWindow inherits Window {
+    title: "Pass Broker";
+    icon: @image-url("icon.svg");
+    preferred-width: 1100px;
+    preferred-height: 780px;
+    min-width: 900px;
+    min-height: 640px;
+    background: Palette.background;
+
+    HorizontalLayout {
+        // ---- sidebar ---------------------------------------------------------------
+        Rectangle {
+            width: 270px;
+            background: Theme.sidebar;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 6px;
+                HorizontalLayout {
+                    padding-bottom: 14px;
+                    spacing: 10px;
+                    Image { source: @image-url("icon.svg"); width: 34px; height: 34px; }
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Pass Broker"; font-size: 17px; font-weight: 700; }
+                        Muted { text: "Sign-ins without sharing secrets"; font-size: 12px; }
+                    }
+                }
+                for s[i] in Wiz.steps: StepButton {
+                    item: s;
+                    number: i + 1;
+                    selected: Wiz.current == i;
+                    clicked => { Wiz.go(i); }
+                }
+                Rectangle { height: 1px; background: Theme.line; }
+                StepButton {
+                    item: { title: "Control center", subtitle: Wiz.running ? "Broker " + Wiz.broker-state : (Wiz.setup-done ? "Start, stop, revoke, activity" : "Finish steps 1–5 first"), state: Wiz.setup-done ? (Wiz.running ? 3 : 1) : 0 };
+                    number: 7;
+                    selected: Wiz.current == 6;
+                    clicked => { Wiz.go(6); }
+                }
+                Rectangle { vertical-stretch: 1; }
+                if Wiz.running: Rectangle {
+                    height: 40px;
+                    border-radius: 8px;
+                    background: Theme.ok.with-alpha(0.15);
+                    Text { text: "● Broker " + Wiz.broker-state; color: Theme.ok; font-weight: 600; }
+                }
+            }
+        }
+
+        // ---- main ------------------------------------------------------------------
+        VerticalLayout {
+            padding: 24px;
+            spacing: Theme.gap;
+            if Wiz.toast != "": Rectangle {
+                height: 44px;
+                border-radius: 8px;
+                background: (Wiz.toast-error ? Theme.bad : Theme.ok).with-alpha(0.14);
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 6px;
+                    Text { text: Wiz.toast; color: Wiz.toast-error ? Theme.bad : Theme.ok; vertical-alignment: center; overflow: elide; font-weight: 600; }
+                    Button { text: "✕"; clicked => { Wiz.dismiss-toast(); } }
+                }
+            }
+            if Wiz.current == 0: RequirementsPage { }
+            if Wiz.current == 1: TokenPage { }
+            if Wiz.current == 2: VaultPage { }
+            if Wiz.current == 3: AccessPage { }
+            if Wiz.current == 4: UnlockPage { }
+            if Wiz.current == 5: AssistantsPage { }
+            if Wiz.current == 6: ControlPage { }
+        }
+    }
+
+    // ---- overlays ----------------------------------------------------------------------
+
+    if Wiz.busy: Rectangle {
+        x: root.width - 300px;
+        y: root.height - 60px;
+        width: 280px;
+        height: 44px;
+        border-radius: 8px;
+        background: Theme.card;
+        border-width: 1px;
+        border-color: Theme.line;
+        drop-shadow-blur: 12px;
+        drop-shadow-color: #0003;
+        HorizontalLayout {
+            padding: 10px;
+            spacing: 10px;
+            Spinner { indeterminate: true; width: 24px; }
+            Text { text: Wiz.busy-text; vertical-alignment: center; overflow: elide; }
+        }
+    }
+
+    if Wiz.confirm-step >= 0: Rectangle {
+        background: #0008;
+        TouchArea { }
+        Rectangle {
+            width: 480px;
+            height: 260px;
+            border-radius: 14px;
+            background: Theme.card;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 12px;
+                Heading { text: "Unlock “" + Wiz.steps[Wiz.confirm-step].title + "”?"; font-size: 18px; }
+                Muted { text: Wiz.unlock-warnings[Wiz.confirm-step]; }
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: end;
+                    Button { text: "Keep locked"; clicked => { Wiz.confirm-step = -1; } }
+                    Button {
+                        text: "Unlock";
+                        primary: true;
+                        clicked => {
+                            Wiz.unlock-step(Wiz.confirm-step);
+                            Wiz.confirm-step = -1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if Wiz.new-token != "": Rectangle {
+        background: #0008;
+        TouchArea { }
+        Rectangle {
+            width: 560px;
+            height: 250px;
+            border-radius: 14px;
+            background: Theme.card;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 12px;
+                Heading { text: "Token for " + Wiz.new-token-name; font-size: 18px; }
+                Muted { text: "Put it in that app's connector settings as the header Authorization: Bearer <token>. It's shown only once. Never give it to Grok."; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    LineEdit { text: Wiz.new-token; read-only: true; font-size: 13px; }
+                    Button { text: "Copy"; clicked => { Wiz.copy(Wiz.new-token, true); } }
+                }
+                Muted { text: Wiz.copy-note; font-size: 12px; }
+                Rectangle { vertical-stretch: 1; }
+                HorizontalLayout {
+                    alignment: end;
+                    Button { text: "Done"; primary: true; clicked => { Wiz.close-token(); } }
+                }
+            }
+        }
+    }
+
+    if Wiz.access-bot != "": Rectangle {
+        background: #0008;
+        TouchArea { }
+        Rectangle {
+            width: 560px;
+            height: min(root.height - 80px, 620px);
+            border-radius: 14px;
+            background: Theme.card;
+            VerticalLayout {
+                padding: 24px;
+                spacing: 10px;
+                Heading { text: "What can “" + Wiz.access-bot + "” use?"; font-size: 18px; }
+                Muted { text: "Only what's ticked. The name is self-reported, so this limits mistakes, not a bot that lies about who it is. Every use still needs your Allow."; font-size: 12px; }
+                ListView {
+                    vertical-stretch: 1;
+                    for item[i] in Wiz.access-items: HorizontalLayout {
+                        height: 32px;
+                        spacing: 10px;
+                        CheckBox {
+                            text: item.label;
+                            checked: item.on;
+                            toggled => { Wiz.access-toggle(i, self.checked); }
+                        }
+                    }
+                }
+                Switch { text: "May use email codes (read through Proton Mail Bridge)"; checked <=> Wiz.access-email; }
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: end;
+                    Button { text: "Cancel"; clicked => { Wiz.close-access(); } }
+                    Button { text: "Save"; primary: true; clicked => { Wiz.save-access(); } }
+                }
+            }
+        }
+    }
+}
