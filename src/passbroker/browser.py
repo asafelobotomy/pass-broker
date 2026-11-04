@@ -15,6 +15,8 @@ appears on your desktop. The wizard's Control center shows it instead
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import re
 import socket
 import time
@@ -37,6 +39,21 @@ CHROMIUM_ARGS = [
     "--disable-features=PasswordManagerOnboarding,AutofillServerCommunication,AutofillEnableAccountWalletStorage",
 ]
 VIEWPORT = {"width": 1280, "height": 900}
+# Variables that make Playwright, or the Node driver under it, log every call
+# (fill values included) to stderr or a file outside the scrubbed logs, open a
+# debugger, or load extra code. Only where the browsers live is kept.
+DEBUG_ENV = ("DEBUG", "DEBUG_FILE", "NODE_DEBUG", "NODE_OPTIONS", "PWDEBUG")
+DEBUG_PREFIXES = ("PW_", "PWDEBUG", "PWTEST_", "PLAYWRIGHT_")
+KEEP_ENV = ("PLAYWRIGHT_BROWSERS_PATH",)
+log = logging.getLogger(__name__)
+
+
+def drop_debug_env() -> list[str]:
+    """Remove debugging variables before Playwright starts; returns what was removed."""
+    gone = [k for k in os.environ if k not in KEEP_ENV and (k in DEBUG_ENV or k.startswith(DEBUG_PREFIXES))]
+    for k in gone:
+        del os.environ[k]
+    return sorted(gone)
 MAX_SESSIONS = 12
 
 
@@ -67,6 +84,9 @@ class Browser:
     async def start(self) -> None:
         # Playwright talks to Chromium over a pipe: no DevTools port is opened
         # that other local programs could attach to.
+        gone = drop_debug_env()
+        if gone:
+            log.warning("ignored debugging variables that could log secrets: %s", ", ".join(gone))
         self._pw = await async_playwright().start()
         if not self._keep:
             self._browser = await self._pw.chromium.launch(**self._launch_opts())

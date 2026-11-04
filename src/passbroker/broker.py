@@ -20,7 +20,7 @@ from .files import FilesMixin
 from .fills import FillsMixin
 from .keys import KeyStore
 from .mailcode import MailMixin, MailSettings
-from .redact import Redactor
+from .redact import Redactor, clean
 from .unlock import Unlockers
 from .vault import Backend, Login, VaultError
 
@@ -30,8 +30,10 @@ class BrokerError(Exception):
 
 
 def plain(text: str, limit: int = 120) -> str:
-    """Text from a bot or a file name, made safe for a notification: one line, no markup."""
-    return re.sub(r"[\x00-\x1f\x7f<>&]", " ", text or "").strip()[:limit]
+    """Text from a bot or a file name, made safe for a notification: one line, no
+    markup, and no invisible or text-reversing characters that could make the
+    request read differently from what it is."""
+    return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
 class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin):

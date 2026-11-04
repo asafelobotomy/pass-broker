@@ -7,6 +7,7 @@ use crate::broker_proc::{start_broker, stop_broker_blocking_app};
 use crate::state::ASSISTANTS;
 use crate::view::*;
 use std::time::Duration;
+use arboard::SetExtLinux;
 
 const CLIPBOARD_CLEAR: Duration = Duration::from_secs(60);
 
@@ -146,7 +147,10 @@ pub fn copy_text(app: &Shared, ui: &AppWindow, text: String, sensitive: bool) {
         toast(ui, "No clipboard available; select the text and press Ctrl+C.", true);
         return;
     };
-    if cb.set_text(text.clone()).is_err() {
+    // Secrets are marked so clipboard managers (KDE's Klipper and others that honour
+    // x-kde-passwordManagerHint) leave them out of their saved history.
+    let set = if sensitive { cb.set().exclude_from_history().text(text.clone()) } else { cb.set_text(text.clone()) };
+    if set.is_err() {
         toast(ui, "Couldn't copy; select the text and press Ctrl+C.", true);
         return;
     }
