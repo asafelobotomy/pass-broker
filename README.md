@@ -64,6 +64,14 @@ again. Setup can't be unlocked while the broker runs. The **Control center** sta
 broker and Funnel, lists connected apps, and shows activity. **Revoke** and **Emergency stop** are
 never locked.
 
+The broker's browser runs **hidden**, so it never pops up over what you're doing. The Control
+center shows each bot's tab live instead, about once a second, view-only. These pictures are
+masked exactly like the screenshots bots get: password and code fields are blacked out, and no
+picture is taken at all while a page shows a secret as text. They're only made while the Control
+center is on screen, kept in memory (`$XDG_RUNTIME_DIR`, never your disk) where only you can read
+them, and deleted when the session ends or the broker stops. Turn on **Own window** there (while the
+broker is stopped) if you'd rather have a real window, for example to solve a CAPTCHA yourself.
+
 The wizard drives the broker through `passbroker api …`, a JSON interface, and never handles the
 Proton Pass token except to pipe a pasted one straight into the keyring. It finds `passbroker` on
 your PATH, or this project's `.venv`, or wherever `$PASSBROKER_CLI` points.
@@ -141,7 +149,8 @@ The token is printed once. Revoke it with `passbroker remove-client claude`.
 passbroker serve --public-host pass.example.com
 ```
 
-A Chromium window opens. Leave it visible so you can watch what the assistant does.
+A Chromium window opens so you can watch what the assistant does. Add `--headless` to keep it
+off your desktop; the wizard then shows it live in its Control center instead.
 Approvals appear as desktop notifications with **Allow** and **Deny**. If nobody answers in 60
 seconds, it's denied. `--grant-minutes 0` asks every time.
 

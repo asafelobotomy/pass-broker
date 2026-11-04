@@ -3,6 +3,7 @@
 import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette } from "std-widgets.slint";
 import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
 import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
+import { BrowserView } from "browser.slint";
 import { Wiz } from "../store.slint";
 
 export component AssistantsPage inherits VerticalLayout {
@@ -102,23 +103,7 @@ export component ControlPage inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.gap;
         vertical-stretch: 1;
-        Card {
-            horizontal-stretch: 3;
-            Section { text: "Activity"; }
-            ListView {
-                for a in Wiz.audit: Rectangle {
-                    height: 30px;
-                    HorizontalLayout {
-                        spacing: 10px;
-                        Muted { text: a.ts; width: 130px; font-size: 12px; vertical-alignment: center; }
-                        Text { text: a.who; width: 130px; overflow: elide; vertical-alignment: center; font-weight: 600; }
-                        Text { text: a.event; width: 140px; overflow: elide; vertical-alignment: center; }
-                        Muted { text: a.host + "  " + a.item; overflow: elide; vertical-alignment: center; }
-                        Text { text: a.result; color: a.result == "denied" || a.result == "refused" ? Theme.bad : Theme.ok; vertical-alignment: center; }
-                    }
-                }
-            }
-        }
+        BrowserView { horizontal-stretch: 3; }
         Card {
             horizontal-stretch: 2;
             Section { text: "Bots"; }
@@ -142,9 +127,30 @@ export component ControlPage inherits VerticalLayout {
             Rectangle { vertical-stretch: 1; }
         }
     }
-    Card {
-        height: 180px;
-        Section { text: "Broker log"; }
-        LogView { lines: Wiz.log-lines; }
+    HorizontalLayout {
+        spacing: Theme.gap;
+        height: 210px;
+        Card {
+            horizontal-stretch: 3;
+            Section { text: "Activity"; }
+            ListView {
+                for a in Wiz.audit: Rectangle {
+                    height: 30px;
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Muted { text: a.ts; width: 130px; font-size: 12px; vertical-alignment: center; }
+                        Text { text: a.who; width: 130px; overflow: elide; vertical-alignment: center; font-weight: 600; }
+                        Text { text: a.event; width: 140px; overflow: elide; vertical-alignment: center; }
+                        Muted { text: a.host + "  " + a.item; overflow: elide; vertical-alignment: center; }
+                        Text { text: a.result; color: a.result == "denied" || a.result == "refused" ? Theme.bad : Theme.ok; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+        Card {
+            horizontal-stretch: 2;
+            Section { text: "Broker log"; }
+            LogView { lines: Wiz.log-lines; }
+        }
     }
 }

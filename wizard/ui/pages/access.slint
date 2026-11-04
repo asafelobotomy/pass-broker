@@ -36,7 +36,6 @@ export component AccessPage inherits VerticalLayout {
         Field { label: "Each Allow lasts (min)"; SpinBox { minimum: 0; maximum: 120; value <=> Wiz.grant-minutes; enabled: !Wiz.locked; } }
         Field { label: "Sign out of sites"; Switch { text: "When the broker stops or sits idle"; checked <=> Wiz.clear-sessions; enabled: !Wiz.locked; } }
         if Wiz.clear-sessions: Field { label: "Idle after (min)"; SpinBox { minimum: 1; maximum: 240; value <=> Wiz.idle-minutes; enabled: !Wiz.locked; } }
-        Field { label: "Browser window"; Switch { text: "Show it, so I can watch"; checked <=> Wiz.show-browser; enabled: !Wiz.locked; } }
         Muted { text: "Signing out matters: after an approved sign-in, the site stays logged in inside the broker's browser, and an assistant could keep using it without asking again."; font-size: 12px; }
         Rectangle { vertical-stretch: 1; }
     }

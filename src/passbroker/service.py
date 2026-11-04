@@ -70,6 +70,9 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ReadWritePaths={rw}
+# $XDG_RUNTIME_DIR/passbroker: the Control center's live browser view (memory only, removed on stop).
+RuntimeDirectory=passbroker
+RuntimeDirectoryMode=0700
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes

@@ -13,7 +13,8 @@ def test_unit_is_sandboxed_and_manages_funnel(tmp_path, monkeypatch):
     config.mkdir()
     (config / "unlockers.json").write_text(json.dumps({"actions": [{"output_dir": str(tmp_path / "Unlocked")}]}))
     text = service.render(["--port", "8787", "--public-host", "pc.example.ts.net", "--manage-funnel"], config, data, state, 8787, funnel=True)
-    for line in ("NoNewPrivileges=yes", "PrivateTmp=yes", "ProtectSystem=strict", "UMask=0077", "Restart=on-failure"):
+    for line in ("NoNewPrivileges=yes", "PrivateTmp=yes", "ProtectSystem=strict", "UMask=0077", "Restart=on-failure",
+                 "RuntimeDirectory=passbroker", "RuntimeDirectoryMode=0700"):
         assert line in text
     assert "funnel --bg --https=443 http://127.0.0.1:8787" in text and "funnel --https=443 off" in text
     rw = next(line for line in text.splitlines() if line.startswith("ReadWritePaths="))

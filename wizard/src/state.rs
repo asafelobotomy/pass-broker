@@ -37,7 +37,8 @@ pub struct Settings {
     pub own_host: String,
     pub port: i32,
     pub grant_minutes: i32,
-    pub show_browser: bool,
+    /// Show the browser in its own window; otherwise it's hidden and the Control center shows it.
+    pub browser_window: bool,
     pub clear_sessions: bool,
     pub idle_minutes: i32,
     /// Run the broker as a sandboxed systemd user service instead of a wizard child.
@@ -54,7 +55,7 @@ impl Default for Settings {
             own_host: String::new(),
             port: 8787,
             grant_minutes: 2,
-            show_browser: true,
+            browser_window: false,
             clear_sessions: true,
             idle_minutes: 15,
             service_mode: false,

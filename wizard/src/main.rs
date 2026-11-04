@@ -5,6 +5,7 @@ mod api;
 mod broker_proc;
 mod extras_cb;
 mod live_cb;
+mod preview;
 mod setup_cb;
 mod state;
 mod svc_mode;
@@ -101,6 +102,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
     extras_cb::wire_extras(&app, &ui);
     svc_mode::wire(&app, &ui);
+    preview::wire(&app, &ui);
     svc_mode::poll(&app, &ui);
     access_cb::wire_access(&app, &ui);
     // a Funnel left on by a crash or reboot would expose whatever later listens on our port
@@ -118,6 +120,17 @@ fn main() -> Result<(), slint::PlatformError> {
             svc_mode::poll(&app, &ui);
             if page >= 5 && !app.polling.swap(true, Ordering::SeqCst) {
                 view::poll_live(&app, &ui);
+            }
+        });
+    }
+
+    // the hidden browser's live view, while the Control center is on screen
+    let preview_timer = Timer::default();
+    {
+        let (app, weak) = (app.clone(), ui.as_weak());
+        preview_timer.start(TimerMode::Repeated, Duration::from_secs(1), move || {
+            if let Some(ui) = weak.upgrade() {
+                preview::tick(&app, &ui);
             }
         });
     }

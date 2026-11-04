@@ -61,7 +61,7 @@ pub fn start(app: &Shared, ui: &AppWindow) {
     if !public.is_empty() {
         cmd.extend(["--public-host".into(), public.clone()]);
     }
-    if !settings.show_browser {
+    if !settings.browser_window {
         cmd.push("--headless".into());
     }
     if settings.clear_sessions {

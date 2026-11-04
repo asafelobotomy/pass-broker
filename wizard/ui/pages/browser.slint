@@ -1,0 +1,46 @@
+// The broker's browser, shown inside the Control center instead of a window on
+// your desktop. View-only: frames are masked like the screenshots bots get.
+
+import { Button, Switch } from "std-widgets.slint";
+import { Theme, Muted, Section, Card } from "../theme.slint";
+import { Wiz } from "../store.slint";
+
+export component BrowserView inherits Card {
+    HorizontalLayout {
+        spacing: 8px;
+        Section { text: "Browser"; vertical-alignment: center; }
+        for t in Wiz.preview-tabs: Button {
+            text: t.bot + (t.busy ? " ·" : "");
+            checkable: true;
+            checked: t.key == Wiz.preview-selected;
+            clicked => { Wiz.select-preview(t.key); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Switch {
+            text: "Own window";
+            checked: Wiz.browser-window;
+            enabled: !Wiz.running;
+            toggled => { Wiz.set-browser-window(self.checked); }
+        }
+    }
+    Rectangle {
+        vertical-stretch: 1;
+        min-height: 160px;
+        border-radius: 6px;
+        background: Theme.sidebar;
+        clip: true;
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: Wiz.preview-image;
+            image-fit: contain;
+        }
+        if Wiz.preview-image.width == 0: Muted {
+            text: !Wiz.running ? "Start the broker to see its browser here." : Wiz.browser-window ? "The browser has its own window; it's shown here too while a bot uses it." : "Nothing open: a bot's tab appears here while it uses the browser.";
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+    Muted { text: Wiz.preview-caption; font-size: 12px; overflow: elide; }
+}

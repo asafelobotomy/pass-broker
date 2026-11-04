@@ -52,7 +52,7 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
             "--grant-minutes".into(), settings.grant_minutes.to_string(),
         ];
         if !public.is_empty() { cmd.extend(["--public-host".into(), public.clone()]); }
-        if !settings.show_browser { cmd.push("--headless".into()); }
+        if !settings.browser_window { cmd.push("--headless".into()); }
         if settings.clear_sessions { cmd.extend(["--idle-minutes".into(), settings.idle_minutes.to_string()]); } else { cmd.push("--keep-sessions".into()); }
         let argv: Vec<String> = app.cli.call(&cmd, None)?["argv"].as_array().ok_or("bad serve command")?.iter().map(s).collect();
         let url = if public.is_empty() { format!("http://127.0.0.1:{}/mcp", settings.port) } else { format!("https://{public}/mcp") };

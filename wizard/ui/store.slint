@@ -12,6 +12,7 @@ export struct CheckRow { label: string, detail: string, ok: bool, required: bool
 export struct LoginRow { title: string, sites: string, user: string, totp: string, fillable: bool }
 export struct ConnRow { id: string, name: string, app: string, created: string, last-used: string, active: bool }
 export struct BotRow { name: string, enabled: bool, first-seen: string, last-seen: string, last-action: string, via: string }
+export struct PreviewTab { key: string, bot: string, withheld: bool, busy: bool }
 export struct AuditRow { ts: string, who: string, event: string, item: string, host: string, result: string }
 
 export struct UnlockAction { name: string, tool: string, item: string, folders: string, output: string, returns: bool }
@@ -75,7 +76,6 @@ export global Wiz {
     in property <bool> ts-ready;
     in-out property <int> port: 8787;
     in-out property <int> grant-minutes: 2;
-    in-out property <bool> show-browser: true;
     in-out property <bool> clear-sessions: true;
     in-out property <int> idle-minutes: 15;
     in property <bool> access-ok;
@@ -108,6 +108,14 @@ export global Wiz {
     callback stop-broker;
     callback emergency-stop;
     callback probe;
+    // the hidden browser's live view
+    in-out property <bool> browser-window: false;
+    in property <[PreviewTab]> preview-tabs;
+    in-out property <string> preview-selected;
+    in property <image> preview-image;
+    in property <string> preview-caption;
+    callback set-browser-window(bool);
+    callback select-preview(string);
 
     out property <bool> running: broker-state != "stopped";
     out property <bool> locked: steps.length > current && steps[current].state == 2;

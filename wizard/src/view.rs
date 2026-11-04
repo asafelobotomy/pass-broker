@@ -47,7 +47,6 @@ pub fn load_settings_into_ui(app: &App, ui: &AppWindow) {
     wiz(ui).set_own_host(s.own_host.clone().into());
     wiz(ui).set_port(s.port);
     wiz(ui).set_grant_minutes(s.grant_minutes);
-    wiz(ui).set_show_browser(s.show_browser);
     wiz(ui).set_clear_sessions(s.clear_sessions);
     wiz(ui).set_idle_minutes(s.idle_minutes);
 }
@@ -62,7 +61,6 @@ pub fn save_settings_from_ui(app: &App, ui: &AppWindow) {
     s.own_host = wiz(ui).get_own_host().trim().trim_start_matches("https://").trim_end_matches('/').to_string();
     s.port = wiz(ui).get_port();
     s.grant_minutes = wiz(ui).get_grant_minutes();
-    s.show_browser = wiz(ui).get_show_browser();
     s.clear_sessions = wiz(ui).get_clear_sessions();
     s.idle_minutes = wiz(ui).get_idle_minutes();
     st.save();

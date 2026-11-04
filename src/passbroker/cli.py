@@ -91,6 +91,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     from .keys import KeyStore
     from .mailcode import MailSettings
     from .oauth import DEFAULT_REDIRECT_HOSTS, BrokerOAuth
+    from .preview import Preview, preview_dir
     from .redact import Redactor
     from .server import ScrubLogs, build_app, build_server, load_clients
     from .unlock import Unlockers
@@ -135,6 +136,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         devices=DeviceStore(config / "devices.json"),
         mail=MailSettings.load(config / "mail.json"),
     )
+    preview = Preview(browser, redactor, preview_dir())
     browser.on_signed_out = lambda key, reason: broker.audit.record("signed_out", client=key, reason=reason)
     clients_path = config / "clients.json"
     public = args.public_host[0] if args.public_host else None
@@ -155,11 +157,13 @@ def cmd_serve(args: argparse.Namespace) -> None:
 
     async def main() -> None:
         await browser.start()
+        await preview.start()
         try:
             # log_config=None: uvicorn logs through the root handlers, which scrub every record.
             server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, log_config=None, access_log=False))
             await server.serve()
         finally:
+            await preview.stop()
             await browser.stop()
             if args.manage_funnel:
                 # Funnel would otherwise stay on (and survive reboots) with nothing behind it.
@@ -198,7 +202,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--public-host", action="append", default=[], help="tunnel hostname allowed in the Host header, e.g. pass.example.com")
     s.add_argument("--grant-minutes", type=float, default=10, help="how long one Allow lasts for the same item and site (0 = ask every time)")
     s.add_argument("--approval-timeout", type=int, default=60)
-    s.add_argument("--headless", action="store_true", help="hide the browser window (default: visible, so you can watch)")
+    s.add_argument("--headless", action="store_true", help="run the browser without a window; the wizard's Control center shows it instead")
     s.add_argument("--pass-cli", default="pass-cli")
     s.add_argument("--keep-sessions", action="store_true", help="keep sites signed in between runs (default: fresh browser each run)")
     s.add_argument("--idle-minutes", type=float, default=15, help="sign the browser out of everything after this long unused (0 = never)")

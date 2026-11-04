@@ -5,6 +5,11 @@ everything after it sits idle (or when the bot calls end_session), because an
 approved sign-in would otherwise stay usable without asking again. Password
 saving and autofill are off. Every request is checked against a guard that
 refuses this PC, your LAN and your tailnet.
+
+Without a window (`headless`), Chromium runs in its new headless mode: the
+same browser as the windowed one, so sites treat it the same, but nothing
+appears on your desktop. The wizard's Control center shows it instead
+(see preview.py).
 """
 
 from __future__ import annotations
@@ -64,9 +69,20 @@ class Browser:
         # that other local programs could attach to.
         self._pw = await async_playwright().start()
         if not self._keep:
-            self._browser = await self._pw.chromium.launch(headless=self._headless, args=CHROMIUM_ARGS)
+            self._browser = await self._pw.chromium.launch(**self._launch_opts())
         if self._idle_s > 0 and not self._keep:
             self._idle_task = asyncio.create_task(self._idle_watch())
+
+    def _launch_opts(self) -> dict[str, object]:
+        # channel="chromium" picks full Chromium's new headless mode over the
+        # stripped-down headless shell, which more sites detect and block.
+        opts: dict[str, object] = {"headless": self._headless, "args": CHROMIUM_ARGS}
+        if self._headless:
+            opts["channel"] = "chromium"
+        return opts
+
+    def sessions(self) -> list[tuple[str, Session]]:
+        return list(self._sessions.items())
 
     async def session(self, key: str) -> Session:
         """The session for one bot (`connection/bot`), created on first use."""
@@ -87,8 +103,7 @@ class Browser:
             folder = self._profile / re.sub(r"[^\w.-]", "_", key)
             folder.mkdir(parents=True, exist_ok=True, mode=0o700)
             ctx = await self._pw.chromium.launch_persistent_context(
-                str(folder), headless=self._headless, accept_downloads=False, viewport=VIEWPORT, args=CHROMIUM_ARGS,
-                service_workers="block",
+                str(folder), accept_downloads=False, viewport=VIEWPORT, service_workers="block", **self._launch_opts(),
             )
         else:
             assert self._browser is not None

@@ -3262,6 +3262,7 @@ name = "passbroker-wizard"
 version = "0.1.0"
 dependencies = [
  "arboard",
+ "image",
  "libc",
  "serde",
  "serde_json",

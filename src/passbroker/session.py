@@ -139,6 +139,13 @@ class Session:
 
     async def screenshot(self) -> bytes:
         self.touch()
+        return await self.masked_capture()
+
+    async def masked_capture(self, jpeg_quality: int | None = None) -> bytes:
+        """The tab with secret fields blacked out, refused while a secret shows as text.
+
+        Doesn't count as use, so the live view never keeps an idle session signed in.
+        """
         for frame in self.frames():
             try:
                 text = await frame.evaluate(VISIBLE_TEXT_JS)
@@ -147,7 +154,8 @@ class Session:
             if self._redactor.contains_secret(text):
                 raise BrowserError("screenshot withheld: the page is showing a secret value as text")
         masks = [f.locator(SENSITIVE_CSS) for f in self.frames()]
-        return await self.page.screenshot(mask=masks, mask_color="#000000", animations="disabled", caret="hide")
+        fmt: dict[str, Any] = {"type": "jpeg", "quality": jpeg_quality} if jpeg_quality else {}
+        return await self.page.screenshot(mask=masks, mask_color="#000000", animations="disabled", caret="hide", **fmt)
 
     # ---- broker-only primitives --------------------------------------------------
 
