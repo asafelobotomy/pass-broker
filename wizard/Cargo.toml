@@ -2,7 +2,10 @@
 name = "passbroker-wizard"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "MIT"
+description = "Setup wizard and control center for Pass Broker"
+repository = "https://github.com/asafelobotomy/pass-broker"
 
 [dependencies]
 arboard = { version = "3.7.0", features = ["wayland-data-control"] }

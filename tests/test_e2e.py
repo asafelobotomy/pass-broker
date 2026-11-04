@@ -31,7 +31,7 @@ def _free_port() -> int:
 
 @pytest.fixture
 def server(tmp_path):
-    env = {**os.environ, **{k: str(tmp_path / k) for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")}}
+    env = {**os.environ, "PASSBROKER_TEST_MODE": "1", **{k: str(tmp_path / k) for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")}}
     cli = [sys.executable, "-m", "passbroker.cli"]
     token = subprocess.run([*cli, "add-client", "grok"], env=env, capture_output=True, text=True, check=True).stdout.strip().splitlines()[-1]
     with Site() as site:

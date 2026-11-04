@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tools the unlock tests use
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gnupg p7zip-full openssl
+      - name: Install
+        run: uv sync --locked --python ${{ matrix.python }}
+      - name: Chromium for the browser tests
+        run: uv run playwright install --with-deps chromium
+      - name: Lint
+        run: uvx ruff check --select F,E9,B,UP,SIM,PIE,I --ignore UP037,SIM105,SIM108,SIM117,B008 src tests
+      - name: Dependencies declared
+        run: uvx deptry src
+      - name: Tests (includes the 400-line limit)
+        run: uv run pytest -q
+
+  wizard:
+    name: Wizard (Rust)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: wizard
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: wizard
+      - name: Libraries Slint and the clipboard link against
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libxkbcommon-dev libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Clippy
+        run: cargo clippy --locked --release -- -D warnings
+      - name: Tests
+        run: cargo test --locked --release
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

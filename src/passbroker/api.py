@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -174,70 +173,6 @@ def c_unlocker_remove(a) -> dict[str, Any]:
     return {}
 
 
-def c_pair(a) -> dict[str, Any]:
-    path = ops.dirs()[0] / "pairing"
-    if a.close:
-        path.unlink(missing_ok=True)
-        return {"open": False}
-    path.touch(mode=0o600)
-    os.utime(path)
-    return {"open": True, "minutes": 10}
-
-
-def c_bot_access(a) -> dict[str, Any]:
-    """Set one bot's access from JSON on stdin: logins, unlock, devices, keys, email_codes."""
-    data = json.loads(sys.stdin.readline() or "{}")
-    if not isinstance(data, dict):
-        raise ops.OpError("access must be a JSON object")
-    ops.bots_store().set_access(a.name, data)
-    return {"access": ops.bots_store().access(a.name)}
-
-
-def _store(kind: str):
-    from .devices import DeviceStore
-    from .keys import KeyStore
-
-    return {"keys": KeyStore, "devices": DeviceStore}[kind](ops.dirs()[0] / f"{kind}.json")
-
-
-def c_config(a) -> dict[str, Any]:
-    from dataclasses import asdict as _asdict
-
-    from .mailcode import MailSettings
-
-    mail = MailSettings.load(ops.dirs()[0] / "mail.json")
-    return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail)}
-
-
-def c_config_add(a) -> dict[str, Any]:
-    """Add or replace one key or device action, as JSON on stdin."""
-    from .devices import Device
-    from .keys import Key
-
-    data = json.loads(sys.stdin.readline() or "{}")
-    if not isinstance(data, dict):
-        raise ops.OpError("expected a JSON object")
-    cls = {"keys": Key, "devices": Device}[a.kind]
-    fields = set(cls.__dataclass_fields__) - {"extra"}
-    _store(a.kind).add(cls(**{k: v for k, v in data.items() if k in fields}))
-    return {}
-
-
-def c_config_remove(a) -> dict[str, Any]:
-    if not _store(a.kind).remove(a.name):
-        raise ops.OpError(f"nothing named '{a.name}'")
-    return {}
-
-
-def c_mail_set(a) -> dict[str, Any]:
-    from .mailcode import MailSettings
-
-    data = json.loads(sys.stdin.readline() or "{}")
-    fields = set(MailSettings.__dataclass_fields__)
-    MailSettings(**{k: v for k, v in data.items() if k in fields}).save(ops.dirs()[0] / "mail.json")
-    return {}
-
-
 def c_revoke(a) -> dict[str, Any]:
     ops.revoke_connection(a.id)
     return {}
@@ -258,6 +193,12 @@ def c_probe(a) -> dict[str, Any]:
 
 def c_audit(a) -> dict[str, Any]:
     return {"entries": ops.read_audit(a.limit)}
+
+
+def c_audit_verify(a) -> dict[str, Any]:
+    from .audit import verify
+
+    return verify(ops.dirs()[2] / "audit.jsonl")
 
 
 def c_tailscale(a) -> dict[str, Any]:
@@ -351,12 +292,6 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     add("connections", c_connections)
     add("revoke", c_revoke, (("id",), {}))
     add("bots", c_bots)
-    add("pair", c_pair, (("--close",), {"action": "store_true"}))
-    add("bot-access", c_bot_access, (("name",), {}))
-    add("config", c_config)
-    add("config-add", c_config_add, (("kind",), {"choices": ["keys", "devices"]}))
-    add("config-remove", c_config_remove, (("kind",), {"choices": ["keys", "devices"]}), (("name",), {}))
-    add("mail-set", c_mail_set)
     add("unlockers", c_unlockers)
     add("unlocker-add", c_unlocker_add)
     add("unlocker-remove", c_unlocker_remove, (("name",), {}))
@@ -365,6 +300,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     add("revoke-all", c_revoke_all)
     add("probe", c_probe, (("host",), {}))
     add("audit", c_audit, (("--limit",), {"type": int, "default": 200}))
+    add("audit-verify", c_audit_verify)
     add("tailscale", c_tailscale)
     add("funnel-start", c_funnel_start, (("--port",), {"type": int, "default": 8787}))
     add("funnel-stop", c_funnel_stop)
@@ -375,6 +311,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         (("--headless",), {"action": "store_true"}), (("--keep-sessions",), {"action": "store_true"}),
         (("--idle-minutes",), {"type": float, "default": 15}))
     add("clear-browser", c_clear_browser)
+    from . import api_config, api_service
+
+    api_service.add_parsers(add, vault)
+    api_config.add_parsers(add)
     api.set_defaults(func=run)
 
 

@@ -44,7 +44,7 @@ pub fn wire_setup(app: &Shared, ui: &AppWindow) {
         let (a, w) = (a.clone(), ui.as_weak());
         move |i| {
             let Some(ui) = w.upgrade() else { return };
-            if a.broker.lock().unwrap().is_some() {
+            if crate::svc_mode::running(&a) {
                 toast(&ui, "Stop the broker before changing setup.", true);
                 return;
             }

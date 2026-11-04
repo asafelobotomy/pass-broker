@@ -169,6 +169,10 @@ export global Wiz {
     callback save-access;
     callback close-access;
 
+    // background service
+    in-out property <bool> service-mode: false;
+    callback set-service-mode(bool);
+
     // pairing
     in property <string> pairing-note;
     callback open-pairing;

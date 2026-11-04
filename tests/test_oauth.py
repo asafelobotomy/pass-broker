@@ -33,7 +33,7 @@ def _free_port() -> int:
 
 @pytest.fixture
 def broker(tmp_path):
-    env = {**os.environ, **{k: str(tmp_path / k) for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")}}
+    env = {**os.environ, "PASSBROKER_TEST_MODE": "1", **{k: str(tmp_path / k) for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")}}
     with Site() as site:
         vault = tmp_path / "vault.json"
         vault.write_text(json.dumps(site.vault()))

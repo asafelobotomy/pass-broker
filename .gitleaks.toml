@@ -1,0 +1,7 @@
+# The tests use obviously fake secrets on purpose (to check they never leak).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "fake secrets in the test suite"
+paths = ['''^tests/''']

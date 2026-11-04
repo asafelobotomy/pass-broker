@@ -17,7 +17,11 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
         return;
     }
     if !app.state.lock().unwrap().setup_done() {
-        toast(ui, "Lock steps 1–4 first.", true);
+        toast(ui, "Lock steps 1–5 first.", true);
+        return;
+    }
+    if app.state.lock().unwrap().settings.service_mode {
+        crate::svc_mode::start(app, ui);
         return;
     }
     wiz(ui).set_broker_state("starting".into());

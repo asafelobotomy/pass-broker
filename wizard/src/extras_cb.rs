@@ -74,8 +74,12 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
             let items = a.state.lock().unwrap().unlock_item_titles.clone();
             let item = if g.get_mail_item() > 0 { items.get(g.get_mail_item() as usize - 1).cloned().unwrap_or_default() } else { String::new() };
             let body = json!({"item": item, "host": g.get_mail_host().trim(), "port": g.get_mail_port(), "max_age_minutes": g.get_mail_age()}).to_string();
-            bg(&a, &ui, "Saving…", move |app| app.cli.call(&args(["mail-set"]), Some(&body)), |ui, app, r| {
-                wiz(ui).set_extras_note(match r { Ok(_) => "Email-code settings saved.".into(), Err(e) => e.into() });
+            bg(&a, &ui, "Saving (and recording Bridge's certificate)…", move |app| app.cli.call(&args(["mail-set"]), Some(&body)), |ui, app, r| {
+                wiz(ui).set_extras_note(match r {
+                    Ok(v) if !s(&v["pinned"]).is_empty() => format!("Saved. Bridge's certificate is pinned (SHA-256 {}).", s(&v["pinned"])).into(),
+                    Ok(_) => "Email-code settings saved.".into(),
+                    Err(e) => e.into(),
+                });
                 refresh(app, ui);
             });
         }
@@ -85,9 +89,11 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
 fn save(app: &Shared, ui: &AppWindow, kind: &'static str, body: String, clear: fn(&AppWindow)) {
     bg(app, ui, "Saving…", move |app| app.cli.call(&["config-add".into(), kind.into()], Some(&body)), move |ui, app, r| {
         match r {
-            Ok(_) => {
+            Ok(v) => {
                 clear(ui);
-                wiz(ui).set_extras_note("Added.".into());
+                let pinned = s(&v["pinned"]);
+                let note = if pinned.is_empty() { "Added.".to_string() } else { format!("Added. The device's certificate is pinned (SHA-256 {pinned}).") };
+                wiz(ui).set_extras_note(note.into());
             }
             Err(e) => wiz(ui).set_extras_note(e.into()),
         }

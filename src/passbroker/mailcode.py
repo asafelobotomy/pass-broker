@@ -43,6 +43,12 @@ class MailSettings:
     port: int = 1143
     folder: str = "INBOX"
     max_age_minutes: int = 10
+    cert_pem: str = ""  # Bridge's own certificate, pinned when the settings are saved
+
+    def is_local(self) -> bool:
+        if re.fullmatch(r"[0-9.:]+", self.host):
+            return ipaddress.ip_address(self.host).is_loopback
+        return self.host == "localhost"
 
     @staticmethod
     def load(path: Path) -> "MailSettings":
@@ -51,13 +57,22 @@ class MailSettings:
         except FileNotFoundError:
             return MailSettings()
 
-    def save(self, path: Path) -> None:
+    def save(self, path: Path) -> str:
+        """Save, pinning Bridge's self-signed certificate on first save. Returns its fingerprint."""
         if not isinstance(self.item, str) or not isinstance(self.port, int) or not 1 <= self.max_age_minutes <= 60:
             raise ValueError("invalid email-code settings")
+        from .tlspin import fetch_imap_starttls_cert, fingerprint
+
+        if self.item and self.is_local() and not self.cert_pem:
+            try:
+                self.cert_pem = fetch_imap_starttls_cert(self.host, self.port)
+            except OSError as e:
+                raise ValueError(f"couldn't reach Proton Mail Bridge to record its certificate ({type(e).__name__}); start Bridge and save again") from None
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump(asdict(self), f, indent=2)
+        return fingerprint(self.cert_pem) if self.cert_pem else ""
 
 
 def site_domains(urls: tuple[str, ...] | list[str]) -> set[str]:
@@ -100,11 +115,14 @@ def extract_code(subject: str, body: str) -> str | None:
 def fetch_code(settings: MailSettings, user: str, password: str, domains: set[str], now: float | None = None) -> str | None:
     """Newest code from a sender in `domains` within the age limit, or None."""
     now = now or time.time()
-    ctx = ssl.create_default_context()
-    if ipaddress.ip_address(settings.host).is_loopback if re.fullmatch(r"[0-9.:]+", settings.host) else settings.host == "localhost":
-        # Bridge on this PC uses its own self-signed certificate.
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+    if settings.cert_pem:
+        from .tlspin import pinned_context
+
+        ctx = pinned_context(settings.cert_pem)  # Bridge's own self-signed certificate, and only that
+    elif settings.is_local():
+        raise ssl.SSLError("Bridge's certificate isn't pinned yet; save the email-code settings again while Bridge runs")
+    else:
+        ctx = ssl.create_default_context()
     imap = imaplib.IMAP4(settings.host, settings.port, timeout=20)
     try:
         imap.starttls(ssl_context=ctx)
@@ -156,6 +174,8 @@ class MailMixin:
             password = await self._secret(client, bridge, "password", f"read a sign-in email from {', '.join(sorted(domains))}")
             try:
                 code = await asyncio.to_thread(self.mail_fetch, self.mail, user, password, domains)
+            except ssl.SSLError as e:
+                raise BrokerError(str(e) if "pinned" in str(e) else "Bridge's certificate changed or couldn't be checked; save the email-code settings again") from None
             except (OSError, imaplib.IMAP4.error) as e:
                 raise BrokerError(f"couldn't read mail through Proton Mail Bridge ({type(e).__name__}); is Bridge running?") from None
             finally:

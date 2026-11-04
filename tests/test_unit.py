@@ -169,3 +169,34 @@ def test_bots_registry(tmp_path):
         with pytest.raises(BotError):
             bots.check("conn1", bad, "x")
     assert bots.forget("mailbot") and [b["name"] for b in bots.list()] == ["planner"]
+
+
+def test_test_switches_need_test_mode(monkeypatch):
+    from passbroker import cli
+
+    monkeypatch.delenv("PASSBROKER_TEST_MODE", raising=False)
+    with pytest.raises(SystemExit, match="test suite only"):
+        cli.main(["serve", "--insecure-auto-approve"])
+    with pytest.raises(SystemExit, match="--allow-http-localhost"):
+        cli.main(["serve", "--allow-http-localhost", "--mock", "x.json"])
+
+
+def test_audit_log_chain_and_rotation(tmp_path):
+    from passbroker.audit import AuditLog, verify
+
+    log = AuditLog(tmp_path / "audit.jsonl", Redactor(), max_bytes=600, keep=2)
+    for i in range(12):
+        log.record("approval", client="conn1/mailbot", item=f"Site {i}")
+    assert (tmp_path / "audit.1.jsonl").exists() and (tmp_path / "audit.2.jsonl").exists()
+    result = verify(tmp_path / "audit.jsonl", keep=2)
+    assert result["ok"] and result["entries"] >= 4
+    # a restarted broker carries the chain on
+    AuditLog(tmp_path / "audit.jsonl", Redactor(), max_bytes=600, keep=2).record("restart")
+    assert verify(tmp_path / "audit.jsonl", keep=2)["ok"]
+    # editing an older line breaks the chain at the line after it
+    older = tmp_path / "audit.2.jsonl"
+    lines = older.read_text().splitlines(keepends=True)
+    lines[0] = lines[0].replace("approval", "denied!!")
+    older.write_text("".join(lines))
+    broken = verify(tmp_path / "audit.jsonl", keep=2)
+    assert not broken["ok"] and broken["why"] == "doesn't follow the line before it"

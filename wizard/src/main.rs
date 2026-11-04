@@ -7,6 +7,7 @@ mod extras_cb;
 mod live_cb;
 mod setup_cb;
 mod state;
+mod svc_mode;
 mod unlock_cb;
 mod view;
 
@@ -47,6 +48,8 @@ pub struct App {
     pub ts_host: Mutex<String>,
     pub has_assistant: AtomicBool,
     pub polling: AtomicBool,
+    pub service_active: AtomicBool,
+    pub journal: Mutex<Option<Child>>,
 }
 
 pub type Shared = Arc<App>;
@@ -70,6 +73,8 @@ fn main() -> Result<(), slint::PlatformError> {
         ts_host: Mutex::new(String::new()),
         has_assistant: AtomicBool::new(false),
         polling: AtomicBool::new(false),
+        service_active: AtomicBool::new(false),
+        journal: Mutex::new(None),
     });
 
     wiz(&ui).set_expirations(strings(EXPIRATIONS.iter().map(|x| x.to_string())));
@@ -95,6 +100,8 @@ fn main() -> Result<(), slint::PlatformError> {
         _ => {}
     }
     extras_cb::wire_extras(&app, &ui);
+    svc_mode::wire(&app, &ui);
+    svc_mode::poll(&app, &ui);
     access_cb::wire_access(&app, &ui);
     // a Funnel left on by a crash or reboot would expose whatever later listens on our port
     let port = app.state.lock().unwrap().settings.port.to_string();
@@ -108,6 +115,7 @@ fn main() -> Result<(), slint::PlatformError> {
         timer.start(TimerMode::Repeated, Duration::from_secs(3), move || {
             let Some(ui) = weak.upgrade() else { return };
             let page = wiz(&ui).get_current();
+            svc_mode::poll(&app, &ui);
             if page >= 5 && !app.polling.swap(true, Ordering::SeqCst) {
                 view::poll_live(&app, &ui);
             }

@@ -91,6 +91,10 @@ pub fn wire_live(app: &Shared, ui: &AppWindow) {
         let (a, w) = (a.clone(), ui.as_weak());
         move || {
             let Some(ui) = w.upgrade() else { return };
+            if a.state.lock().unwrap().settings.service_mode {
+                crate::svc_mode::stop(&a, &ui);
+                return;
+            }
             wiz(&ui).set_broker_state("stopping".into());
             bg(&a, &ui, "Stopping…", stop_broker_blocking_app, |ui, app, _| { wiz(ui).set_broker_state("stopped".into()); render_steps(app, ui); });
         }

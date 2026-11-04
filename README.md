@@ -1,5 +1,7 @@
 # Pass Broker
 
+[![CI](https://github.com/asafelobotomy/pass-broker/actions/workflows/ci.yml/badge.svg)](https://github.com/asafelobotomy/pass-broker/actions/workflows/ci.yml)
+
 Lets AI assistants such as Grok Bot or Claude sign in to websites with your Proton Pass
 logins and 2FA codes, without the assistant ever seeing a password, a code or your
 Proton Pass token.
@@ -18,52 +20,21 @@ Tailscale Funnel ──▶ passbroker on 127.0.0.1:8787  (your PC)
                          └─ Chromium on your PC  (fills + submits; secrets never returned)
 ```
 
-## What protects what
+## Security
 
-| Layer | Stops |
-|---|---|
-| Proton Pass agent token limited to one **Agent** vault, `viewer` role, short expiry | a compromised broker reaching your real vault |
-| Token stored in your system keyring, passed to `pass-cli` by environment, never argv | the token showing up in process lists or files |
-| Opaque, per-run handles | the model naming items or fields it wasn't shown |
-| Origin binding (page **and** frame must be HTTPS on a saved host) | prompt injection that fills your password on `evil.com` or in a cross-site iframe |
-| Desktop approval per client, item, site and action (Allow lasts 10 min by default) | the assistant signing in anywhere you didn't ask for |
-| Fill and submit in one step, then the field is cleared | the Secure Form problem where a filled password showed up in a page snapshot |
-| Pinned fills: the field is tagged with a random nonce, and the origin of the frame, every frame above it and the page is re-checked before and after each step | a page that navigates elsewhere while you're approving, which would otherwise receive the password |
-| Exact host matching (subdomains only with `--allow-subdomains`), default ports enforced | `evil.atlassian.net` matching a saved `atlassian.net` |
-| Fresh browser each run, a separate session per bot, signed out after 15 idle minutes or on `end_session` (`--keep-sessions` to opt out); password saving and autofill off | an approved sign-in staying usable, with no further approval, long after you allowed it |
-| The browser refuses this PC, private/LAN, CGNAT/tailnet and `.local`/`.ts.net` addresses for pages, every subresource and WebSockets. Service workers are blocked and WebRTC doesn't reveal LAN addresses | the model using the browser to reach your router, Syncthing, debug ports or other tailnet machines |
-| One-digit-per-box code fields treated as secret everywhere | 2FA digits showing up in snapshots and screenshots |
-| Usernames masked for the model (`a***@proton.me`) | your email landing in the assistant's chat history |
-| No JavaScript tool; snapshots never read sensitive fields; every output scrubbed of every secret seen (plain, URL-, JSON- and HTML-encoded) | a page that echoes your password, or a "show password" button |
-| Screenshots black out secret fields, and are refused if a secret is visible as text | pixels leaking a password |
-| OAuth for remote apps: approving a connection means typing a one-time code that appears **only on your desktop**. 5 tries, 5-minute expiry, one waiting per app, at most 3 in all and 20 notifications an hour | someone else starting a sign-in and you clicking Allow by mistake |
-| Only Cursor's callback host (`--oauth-redirect-host` to change) or this PC can register to receive codes; the consent page and notification name where the code goes; app names are stripped to plain text | a look-alike "Grok" app phishing a connection to itself |
-| A refresh token used twice revokes the whole connection; rate limits on every sign-in endpoint; a Host check on every route; `pbc_` tokens refused through Funnel; a 10-minute pairing window | stolen refresh tokens, notification floods, DNS rebinding, phished connections |
-| Funnel is turned off when the broker stops, the broker stops if the wizard dies, and a stale Funnel is cleared when the wizard starts | the broker's port staying public with nothing (or something else) behind it |
-| Access tokens last 1 hour; refresh tokens last 30 days and are replaced on every use; only hashes are stored; Revoke in the app cuts a connection off at once | a leaked token staying useful |
-| Fixed `pbc_` tokens for local assistants only; Host/Origin checks; binds to 127.0.0.1 | anyone else on the internet or your LAN using the broker |
-| No core dumps, process not ptrace-able | other programs of yours reading the broker's memory |
-| Audit log (`~/.local/state/passbroker/audit.jsonl`) plus Proton's agent audit reasons | not knowing who used what, when |
+Every secret stays on your PC, every use needs your approval on your desktop, and assistants only
+ever get handles, masked snapshots and blacked-out screenshots. **[SECURITY.md](SECURITY.md)** has
+the threat model, what protects what, what it can't stop, and how to report a vulnerability.
 
-### What it can't stop
+## Requirements
 
-- **Bots on one Grok account aren't separated.** They share one connection and one browser (see
-  step 6).
-- **DNS can change between the broker's check and Chromium's own lookup.** The private-address guard
-  resolves names itself and caches them for a minute, so a host that rebinds to a private address in
-  that window could slip through.
-
-- **After you sign in, the assistant can use the account.** Hiding the password doesn't hide
-  what's inside. Only put logins in the Agent vault that you'd let the assistant act in.
-- **Session cookies** live in the broker's browser profile on your PC
-  (`~/.local/share/passbroker/profile`). Anyone with your user account can use them.
-- **A site you trust that is itself compromised** (XSS on the real domain) gets your password,
-  just as it would if you typed it.
-- A page drawing your password into a `<canvas>` or an image can't be detected by text scrubbing.
-- Pages run their own JavaScript in the same world the broker reads from. A hostile page on the
-  *right* domain can lie about its fields; scrubbing is the backstop for that.
-- pass-cli 2.7.0's JSON field names aren't documented. `passbroker check` (below) confirms sites and
-  usernames were read, and prints the listing's key names (never values) if any website is missing.
+- Linux with a desktop that shows notifications (`notify-send`; KDE Plasma and GNOME both work).
+- Python 3.11 or newer and [uv](https://docs.astral.sh/uv/); Rust 1.85 or newer to build the wizard.
+- [Proton Pass CLI](https://protonpass.github.io/pass-cli/) (`pass-cli`), and Chromium for the
+  broker's browser (`uv run playwright install chromium`; the wizard can do this for you).
+- Optional, per feature: Tailscale (Funnel), `gpg`, `openssl`, `7z` (7-Zip 21 or newer) and
+  `keepassxc-cli` (file unlocking), Proton Mail Bridge (email codes), `ssh` (device actions),
+  systemd (background service).
 
 ## Set up with the wizard (easiest)
 
@@ -330,6 +301,35 @@ Names are **self-reported**: a misbehaving or prompt-injected bot can claim anot
 switch guards against mistakes and gives you transparency. **Revoke** (which cuts off every bot on
 that connection) is the real off switch.
 
+## Running in the background
+
+Turn on **Run in the background** in the wizard's Control center, or install the service yourself
+with the same options you'd pass to `serve`:
+
+```bash
+uv run passbroker api service-install --vault Agent --public-host <this-pc>.<tailnet>.ts.net
+```
+
+```bash
+systemctl --user start passbroker
+```
+
+The service starts at login, restarts if it fails, and turns Tailscale Funnel off whenever it stops,
+even after a crash. It runs sandboxed: no privilege gain, a private `/tmp`, the system read-only, and
+writes limited to the broker's folders and your unlock output folders. Reinstall after changing
+unlock actions; the wizard does this every time it starts the service. Logs go to
+`journalctl --user -u passbroker`. Remove it with `passbroker api service-uninstall`.
+
+## Checking the audit log
+
+```bash
+uv run passbroker api audit-verify
+```
+
+It reports how many entries the chain covers, its head hash, or the first line that doesn't follow
+the one before it. Note the head hash somewhere else now and then: a program running as you could
+rewrite the whole chain, but not without changing the head.
+
 ## Rotating and revoking
 
 - Grok: **Revoke** under Assistants → Connected apps (or delete `~/.config/passbroker/oauth.json`
@@ -352,6 +352,13 @@ replay).
 They check that no password, 2FA code or Proton token appears in any tool result, error, server
 log or audit line, including on a page built to leak, wrong-origin pages, cross-site iframes,
 denied approvals and forged client headers.
+
+A few `serve` switches exist only for the tests (auto-approve, a mock vault, no network guard, no
+pairing window). They refuse to work unless `PASSBROKER_TEST_MODE=1` is set, which the test suite
+does for its own throwaway brokers. Never set it for a real broker.
+
+CI runs the Python tests on 3.11 to 3.14, the wizard's clippy and tests, and a gitleaks secret scan
+on every push and pull request.
 
 Every source file is kept to at most 400 lines; `tests/test_loc.py` enforces it. The wizard has its
 own tests:

@@ -40,6 +40,8 @@ pub struct Settings {
     pub show_browser: bool,
     pub clear_sessions: bool,
     pub idle_minutes: i32,
+    /// Run the broker as a sandboxed systemd user service instead of a wizard child.
+    pub service_mode: bool,
 }
 
 impl Default for Settings {
@@ -55,6 +57,7 @@ impl Default for Settings {
             show_browser: true,
             clear_sessions: true,
             idle_minutes: 15,
+            service_mode: false,
         }
     }
 }

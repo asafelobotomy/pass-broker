@@ -7,6 +7,7 @@ import asyncio
 import getpass
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,23 @@ def _file_notifier(path: Path):
     return notify
 
 
+TEST_SWITCHES = ("mock", "allow_http_localhost", "insecure_auto_approve", "no_pairing_window", "notify_file")
+
+
+def check_test_switches(args: argparse.Namespace) -> None:
+    """Switches the test suite needs are refused unless PASSBROKER_TEST_MODE=1 is set.
+
+    Without this, any program running as you could restart the broker with
+    approvals off or the private-network guard disabled.
+    """
+    used = [f"--{name.replace('_', '-')}" for name in TEST_SWITCHES if getattr(args, name)]
+    if not used:
+        return
+    if os.environ.get("PASSBROKER_TEST_MODE") != "1":
+        sys.exit(f"passbroker: {', '.join(used)} are for the test suite only (set PASSBROKER_TEST_MODE=1 to use them)")
+    print(f"WARNING: TEST MODE ({', '.join(used)}): approvals, the network guard or the pairing window may be off. Never use this for real.", file=sys.stderr)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
@@ -78,6 +96,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     from .unlock import Unlockers
     from .vault import MockBackend, ProtonPassBackend
 
+    check_test_switches(args)
     harden_process()
     config, data, state = _dirs()
     redactor = Redactor()
@@ -91,8 +110,6 @@ def cmd_serve(args: argparse.Namespace) -> None:
     else:
         backend = ProtonPassBackend(args.vault, _load_token, redactor, pass_cli=args.pass_cli, session_dir=ops.broker_session_dir())
     approver = StaticApprover(True) if args.insecure_auto_approve else DesktopApprover(args.approval_timeout)
-    if args.insecure_auto_approve:
-        print("WARNING: --insecure-auto-approve skips your approval for every fill. Tests only.", file=sys.stderr)
     browser = Browser(
         data / "profile",
         redactor,

@@ -61,7 +61,7 @@ export component DevicesSection inherits VerticalLayout {
         if Wiz.d-kind == 2: Field { label: "Password goes"; ComboBox { model: ["nowhere", "basic auth", "bearer token", "into the body as {secret}"]; current-index <=> Wiz.d-auth; } }
         if Wiz.d-kind == 2 && Wiz.d-auth == 1: Field { label: "Username"; LineEdit { text <=> Wiz.d-username; } }
         if Wiz.d-kind == 2: Field { label: "Body (JSON)"; LineEdit { text <=> Wiz.d-body; placeholder-text: "{\"password\": \"{secret}\"}"; } }
-        if Wiz.d-kind == 2: Field { label: "Self-signed device"; Switch { text: "Don't verify its certificate"; checked <=> Wiz.d-insecure; } }
+        if Wiz.d-kind == 2: Field { label: "Self-signed device"; Switch { text: "Pin its own certificate (recorded now)"; checked <=> Wiz.d-insecure; } }
         if Wiz.d-kind != 0: Field { label: "Password item"; ComboBox { model: Wiz.device-items; current-index <=> Wiz.d-item; } }
         if Wiz.d-kind != 0: Field { label: "Show output to bots"; Switch { text: "Return the command's or device's reply"; checked <=> Wiz.d-return; } }
         HorizontalLayout { alignment: start; Button { text: "Add device action"; primary: true; enabled: Wiz.d-name != "" && !Wiz.busy; clicked => { Wiz.device-add(); } } }

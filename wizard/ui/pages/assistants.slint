@@ -88,6 +88,16 @@ export component ControlPage inherits VerticalLayout {
         }
         if Wiz.probe-result != "": Muted { text: Wiz.probe-result; font-size: 12px; }
         Muted { text: "Emergency stop revokes every connected app, stops the broker and Funnel, and signs the browser out of everything."; font-size: 12px; }
+        HorizontalLayout {
+            spacing: 10px;
+            Switch {
+                text: "Run in the background (sandboxed systemd service)";
+                checked: Wiz.service-mode;
+                enabled: !Wiz.running;
+                toggled => { Wiz.set-service-mode(self.checked); }
+            }
+        }
+        Muted { text: Wiz.service-mode ? "The broker keeps running when this window is closed, starts at login, restarts if it fails, and turns Funnel off whenever it stops." : "The broker runs only while this window is open."; font-size: 12px; }
     }
     HorizontalLayout {
         spacing: Theme.gap;

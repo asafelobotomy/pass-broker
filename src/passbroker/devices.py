@@ -54,7 +54,8 @@ class Device:
     username: str = ""  # http basic auth user
     body: str = ""  # http: request body, may contain {secret}
     content_type: str = "application/json"
-    insecure_tls: bool = False  # for devices with self-signed certificates
+    insecure_tls: bool = False  # self-signed: pin its certificate (recorded when the action is added)
+    tls_cert_pem: str = ""  # the pinned certificate
     item: str = ""  # vault item whose password is used; empty = none
     return_output: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
@@ -83,6 +84,8 @@ def validate(d: Device) -> None:
         raise DeviceError("kind must be wol, ssh or http")
     if not isinstance(d.return_output, bool) or not isinstance(d.insecure_tls, bool):
         raise DeviceError("switches must be true or false")
+    if d.insecure_tls and not d.url.startswith("https://"):
+        raise DeviceError("pinning a self-signed certificate needs an https:// URL")
     if d.kind == "wol":
         if not MAC_RE.fullmatch(d.mac or ""):
             raise DeviceError("enter the device's MAC address, like aa:bb:cc:dd:ee:ff")
@@ -127,9 +130,24 @@ class DeviceStore:
             json.dump({"actions": [asdict(d) for d in devices]}, f, indent=2)
         os.replace(tmp, self.path)
 
-    def add(self, d: Device) -> None:
+    def add(self, d: Device) -> str:
+        """Save the action; for a self-signed device, record (pin) its certificate now. Returns its fingerprint."""
         validate(d)
+        pinned = ""
+        if d.kind == "http" and d.insecure_tls:
+            from urllib.parse import urlsplit
+
+            from .tlspin import fetch_https_cert, fingerprint
+
+            parts = urlsplit(d.url)
+            if not d.tls_cert_pem:
+                try:
+                    d.tls_cert_pem = fetch_https_cert(parts.hostname or "", parts.port or 443)
+                except OSError as e:
+                    raise DeviceError(f"couldn't reach the device to record its certificate ({type(e).__name__}); is it on?") from None
+            pinned = fingerprint(d.tls_cert_pem)
         self._save([x for x in self.load() if x.name != d.name] + [d])
+        return pinned
 
     def remove(self, name: str) -> bool:
         items = self.load()
@@ -178,8 +196,15 @@ def run(d: Device, secret: str | None) -> dict[str, Any]:
         escaped = json.dumps(secret or "")[1:-1] if "json" in d.content_type else secret or ""
         body = body.replace("{secret}", escaped)
     try:
+        verify: Any = True
+        if d.insecure_tls:
+            if not d.tls_cert_pem:
+                return {"ok": False, "error": "no pinned certificate; ask the user to add this action again"}
+            from .tlspin import pinned_context
+
+            verify = pinned_context(d.tls_cert_pem)
         r = httpx2.request(d.method, d.url, content=body.encode() if body else None, headers=headers, auth=auth,
-                           verify=not d.insecure_tls, timeout=20, follow_redirects=False)
+                           verify=verify, timeout=20, follow_redirects=False)
     except Exception as e:
         return {"ok": False, "error": f"couldn't reach the device ({type(e).__name__})"}
     return {"ok": 200 <= r.status_code < 300, "status": r.status_code, "output": r.text[:MAX_OUTPUT]}

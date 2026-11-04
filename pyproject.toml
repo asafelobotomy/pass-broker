@@ -7,12 +7,29 @@ license = "MIT"
 authors = [
     { name = "asafelobotomy", email = "213836723+asafelobotomy@users.noreply.github.com" }
 ]
-requires-python = ">=3.14"
-dependencies = [
-    "keyring>=25.7.0",
-    "mcp[cli]>=2.3.0",
-    "playwright>=1.64.1",
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Security",
 ]
+dependencies = [
+    "httpx2>=2.16,<3",
+    "keyring>=25.7,<26",
+    "mcp>=2.3,<3",
+    "playwright>=1.64.1,<2",
+    "starlette>=1.10,<2",
+    "uvicorn>=0.54,<1",
+]
+
+[project.urls]
+Repository = "https://github.com/asafelobotomy/pass-broker"
+Issues = "https://github.com/asafelobotomy/pass-broker/issues"
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]
