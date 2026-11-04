@@ -359,3 +359,7 @@ own tests:
 ```bash
 cargo test --manifest-path wizard/Cargo.toml
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).

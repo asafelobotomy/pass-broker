@@ -3,6 +3,7 @@ name = "passbroker"
 version = "0.1.0"
 description = "Let AI assistants sign in, unlock files and run home-device actions with Proton Pass secrets, without ever seeing them."
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "asafelobotomy", email = "213836723+asafelobotomy@users.noreply.github.com" }
 ]
