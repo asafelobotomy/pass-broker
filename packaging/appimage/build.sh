@@ -102,8 +102,10 @@ exec "$(dirname "$(readlink -f "$0")")/../python/bin/python3" -I -m passbroker.c
 EOF
 chmod 755 "$APPDIR/usr/bin/passbroker"
 
-# Python run without -B above would have left .pyc files naming this build folder.
-if grep -rl --binary-files=binary -e "$APPDIR" -e "$PYROOT" -e "$SRC" -e "$HOME/" "$APPDIR" | grep . ; then
+# Python run without -B above would have left .pyc files naming this build folder. Only this
+# machine's paths count: some wheels ship SBOMs naming the machine that built them upstream.
+if grep -rl --binary-files=binary -e "$ROOT" -e "$APPDIR" -e "$PYROOT" -e "$SRC" \
+        -e "${CARGO_HOME:-$HOME/.cargo}" -e "$(uv cache dir)" "$APPDIR" | grep . ; then
     echo "build paths left in the files above" >&2; exit 1
 fi
 
