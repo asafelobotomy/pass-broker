@@ -107,11 +107,16 @@ pub fn wire_live(app: &Shared, ui: &AppWindow) {
             wiz(&ui).set_broker_state("stopping".into());
             bg(&a, &ui, "Emergency stop…", |app| {
                 let revoked = app.cli.call(&args(["revoke-all"]), None);
+                // The background service too, not only a broker this window started; it turns
+                // Funnel off as it stops.
+                let service = app.state.lock().unwrap().settings.service_mode;
+                let stopped = if service { app.cli.call(&args(["service-control", "stop"]), None).map(|_| ()) } else { Ok(()) };
                 stop_broker_blocking_app(app);
                 let cleared = app.cli.call(&args(["clear-browser"]), None);
-                (revoked, cleared)
+                (revoked, cleared.and_then(|c| stopped.map(|_| c)))
             }, |ui, app, (revoked, cleared)| {
                 wiz(ui).set_broker_state("stopped".into());
+                crate::svc_mode::poll(app, ui);
                 let n = revoked.as_ref().map(|v| s(&v["revoked"])).unwrap_or_default();
                 match (revoked, cleared) {
                     (Ok(_), Ok(_)) => toast(ui, format!("Stopped. Revoked {n} connected app(s) and signed the browser out of everything."), false),

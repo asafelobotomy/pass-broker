@@ -36,7 +36,7 @@ program can read your keyring and the broker's files directly.
 | Pinned fills: the field is tagged with a random nonce, and the origin of the frame, every frame above it and the page is re-checked before and after each step | a page that navigates elsewhere while you're approving, which would otherwise receive the password |
 | Exact host matching (subdomains only with `--allow-subdomains`), default ports enforced | `evil.atlassian.net` matching a saved `atlassian.net` |
 | Fresh browser each run, a separate session per bot, signed out after 15 idle minutes or on `end_session` (`--keep-sessions` to opt out); password saving and autofill off | an approved sign-in staying usable, with no further approval, long after you allowed it |
-| The browser refuses this PC, private/LAN, CGNAT/tailnet and `.local`/`.ts.net` addresses for pages, every subresource and WebSockets. Service workers are blocked and WebRTC doesn't reveal LAN addresses | the model using the browser to reach your router, Syncthing, debug ports or other tailnet machines |
+| Every browser connection goes through a filtering proxy inside the broker (password-protected, on 127.0.0.1). It resolves each host itself, refuses this PC, private/LAN, CGNAT/tailnet and `.local`/`.ts.net` addresses (and hosts that don't resolve), and connects to exactly the address it checked: pages, every redirect hop, frames, scripts and WebSockets. Service workers are blocked and WebRTC sends nothing outside the proxy | the model using the browser to reach your router, Syncthing, debug ports or other tailnet machines, including through a redirect or DNS rebinding |
 | One-digit-per-box code fields treated as secret everywhere | 2FA digits showing up in snapshots and screenshots |
 | Usernames masked for the model (`a***@proton.me`) | your email landing in the assistant's chat history |
 | Personal details on pages (emails, phone, card and bank numbers) masked in what a bot reads and blacked out in its screenshots, unless you allow that bot | your details piling up in chat histories, which have leaked (indexed shared chats) |
@@ -50,7 +50,7 @@ program can read your keyring and the broker's files directly.
 | Screenshots black out secret fields, and are refused if a secret is visible as text | pixels leaking a password |
 | OAuth for remote apps: approving a connection means typing a one-time code that appears **only on your desktop**. 5 tries, 5-minute expiry, one waiting per app, at most 3 in all and 20 notifications an hour | someone else starting a sign-in and you clicking Allow by mistake |
 | Only Cursor's callback host (`--oauth-redirect-host` to change) or this PC can register to receive codes; the consent page and notification name where the code goes; app names are stripped to plain text | a look-alike "Grok" app phishing a connection to itself |
-| A refresh token used twice revokes the whole connection; rate limits on every sign-in endpoint; a Host check on every route; `pbc_` tokens refused through Funnel; a 10-minute pairing window | stolen refresh tokens, notification floods, DNS rebinding, phished connections |
+| A refresh token used twice revokes the whole connection; rate limits on every sign-in endpoint; a Host check on every route; `pbc_` tokens refused through Funnel (recognised by Tailscale's own `Tailscale-Funnel-Request` header, whatever Host the request claims); unique connection names; a 10-minute pairing window | stolen refresh tokens, notification floods, DNS rebinding, phished connections |
 | Funnel is turned off when the broker stops, the broker stops if the wizard dies, and a stale Funnel is cleared when the wizard starts | the broker's port staying public with nothing (or something else) behind it |
 | Access tokens last 1 hour; refresh tokens last 30 days and are replaced on every use; only hashes are stored; Revoke in the app cuts a connection off at once | a leaked token staying useful |
 | Fixed `pbc_` tokens for local assistants only; Host/Origin checks; binds to 127.0.0.1 | anyone else on the internet or your LAN using the broker |
@@ -66,7 +66,8 @@ program can read your keyring and the broker's files directly.
 
 - **Bot names are self-reported.** Bots on one Grok account share one connection. Each gets its own
   access list, approvals and browser session, but a bot that lies about its name gets that name's
-  grants. Revoke is the real off switch.
+  grants. A name belongs to the connection that first used it, so another connection can't claim
+  it. Revoke is the real off switch.
 - **After you sign in, the assistant can use the account.** Hiding the password doesn't hide
   what's inside. Only put logins in the Agent vault that you'd let the assistant act in.
 - **Personal-detail masking is pattern matching.** Names, street addresses and unusual formats
@@ -77,9 +78,10 @@ program can read your keyring and the broker's files directly.
   design, when you approve it.
 - **Programs running as you** can answer an approval (as they could press a notification's button), read the agent token in your keyring, the broker's pass-cli
   session, kept browser sessions (`--keep-sessions`), and could rewrite the audit chain consistently.
-- **DNS can change between the broker's check and Chromium's own lookup.** The private-address guard
-  resolves names itself and caches them for a minute, so a host that rebinds to a private address in
-  that window could slip through.
+- **Redirects and the site list.** A redirect can't reach a private address (the proxy refuses the
+  connection), but the site list and blocked pages go by the page's full address, which the proxy
+  can't see inside https. After every load the broker checks where the tab ended up and goes back
+  before the bot can read it, so a site's own open redirect can still send one request elsewhere.
 - **A site you trust that is itself compromised** (XSS on the real domain) gets your password,
   just as it would if you typed it.
 - A page drawing your password into a `<canvas>` or an image can't be detected by text scrubbing,

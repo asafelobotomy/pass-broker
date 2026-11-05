@@ -279,3 +279,25 @@ def test_sign_in_refused_without_pairing_window(broker):
         })
         assert "access_denied" in r.headers.get("location", "") + r.text
         assert not broker["notes"].exists()  # nobody was asked for a code
+
+
+def test_connection_names_are_unique(broker):
+    """Bots and their grants belong to a connection by name, so a second "grok" must not exist."""
+    base, notes, env = broker["base"], broker["notes"], broker["env"]
+    with httpx2.Client() as http:
+        client_id = _register(http, base)
+        verifier, challenge = _pkce()
+        req = _authorize(http, base, client_id, challenge)
+        ok = http.post(f"{base}/consent", data={"req": req, "code": _last_code(notes), "name": "grok", "action": "allow"})
+        assert ok.status_code == 303
+        subprocess.run([sys.executable, "-m", "passbroker.cli", "api", "pair"], env=env, check=True, capture_output=True)
+        verifier2, challenge2 = _pkce()
+        req2 = _authorize(http, base, _register(http, base), challenge2)
+        clash = http.post(f"{base}/consent", data={"req": req2, "code": _last_code(notes), "name": "GROK", "action": "allow"})
+        assert clash.status_code == 200 and "already exists" in clash.text
+        code = parse_qs(urlsplit(ok.headers["location"]).query)["code"][0]
+        assert http.post(f"{base}/token", data={"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT,
+                                                 "client_id": client_id, "code_verifier": verifier}).status_code == 200
+    # a local assistant can't take the connection's name either
+    r = subprocess.run([sys.executable, "-m", "passbroker.cli", "api", "add-client", "grok"], env=env, capture_output=True, text=True)
+    assert "already called grok" in r.stdout + r.stderr

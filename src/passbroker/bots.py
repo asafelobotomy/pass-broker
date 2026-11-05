@@ -115,12 +115,18 @@ class Bots:
             new = entry is None
             if new:
                 entry = data[name] = {"enabled": True, "first_seen": now, "connections": [], "access": empty_access()}
+            conns = entry.setdefault("connections", [])
+            if conns and connection not in conns:
+                # Grants go by bot name, so the name stays with the connection that first used it:
+                # otherwise any other connection could claim to be this bot and get its logins.
+                raise BotError(f"the bot name '{name}' belongs to another connection; pick another name, "
+                               "or ask the user to forget that bot in Pass Broker")
             if not entry.get("enabled", True):
                 raise BotError(f"bot '{name}' is switched off in Pass Broker; ask the user to turn it back on")
             entry["last_seen"] = now
             entry["last_action"] = action + (f" on {site}" if site else "")
-            if connection not in entry.setdefault("connections", []):
-                entry["connections"].append(connection)
+            if not conns:
+                conns.append(connection)
         return name, new
 
     def set_enabled(self, bot: str, enabled: bool) -> None:

@@ -69,7 +69,16 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
         };
         let mut child = match app.cli.spawn(&argv) {
             Ok(c) => c,
-            Err(e) => { wiz(ui).set_broker_state("stopped".into()); toast(ui, format!("Couldn't start the broker: {e}"), true); return; }
+            Err(e) => {
+                wiz(ui).set_broker_state("stopped".into());
+                toast(ui, format!("Couldn't start the broker: {e}"), true);
+                // Funnel was turned on for it; don't leave the port public with nothing behind it.
+                if app.funnel_on.swap(false, Ordering::SeqCst) {
+                    let cli = app.cli.clone();
+                    std::thread::spawn(move || { let _ = cli.call(&args(["funnel-stop"]), None); });
+                }
+                return;
+            }
         };
         let lines = Rc::new(VecModel::<SharedString>::default());
         wiz(ui).set_log_lines(ModelRc::from(lines.clone()));

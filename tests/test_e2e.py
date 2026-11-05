@@ -142,3 +142,13 @@ async def test_full_sign_in_reveals_nothing(server):
     assert '"client": "grok"' in audit and '"bot": "tester"' in audit and "refused_origin" in audit and "bot_refused" in audit
     notes = (server["tmp"] / "notes.jsonl").read_text()
     assert "Bot: tester" not in notes and "Bot: mailbot" in notes  # tester was granted access before its first call
+
+
+async def test_local_tokens_refused_through_funnel_whatever_the_host(server):
+    """A request through Funnel claiming `Host: 127.0.0.1:port` must still be treated as from the internet."""
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    headers = {"authorization": f"Bearer {server['token']}", "tailscale-funnel-request": "?1",
+               "accept": "application/json, text/event-stream", "content-type": "application/json"}
+    async with httpx2.AsyncClient() as http:
+        r = await http.post(server["url"], json=body, headers=headers)
+    assert r.status_code == 401 and b"can't be used from the internet" in r.content

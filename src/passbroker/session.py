@@ -18,6 +18,7 @@ from playwright.async_api import BrowserContext, Frame, Locator, Page
 from playwright.async_api import TimeoutError as PWTimeout
 
 from .browser_js import SENSITIVE_CSS, SNAPSHOT_JS, VISIBLE_TEXT_JS
+from .netproxy import BLOCKED_HEADER
 from .pii import PERSONAL_FIELDS, SCREEN_TEXT
 from .redact import Redactor
 
@@ -95,9 +96,16 @@ class Session:
         except Exception as e:
             if "ERR_ABORTED" in str(e):
                 raise BrowserError("the page didn't load: it may have redirected to a site or page this bot may not open") from None
+            if "ERR_TUNNEL_CONNECTION_FAILED" in str(e) or "ERR_PROXY_CONNECTION_FAILED" in str(e):
+                raise BrowserError("blocked: that page is (or redirects to) this PC, your LAN or your tailnet, or it can't be reached") from None
             if "ERR_BLOCKED_BY_CLIENT" in str(e):
                 raise BrowserError("blocked: that page redirected to this PC, your LAN or your tailnet") from None
             raise
+        if resp is not None and resp.headers.get(BLOCKED_HEADER.lower()):
+            raise BrowserError("blocked: that page is (or redirects to) this PC, your LAN or your tailnet")
+        # The site list and blocked pages go by the full address, which a redirect can change
+        # unseen: check where the tab ended up before returning anything from it.
+        await self.check_tab()
         return {"url": self.page.url, "status": resp.status if resp else None, "title": await self.page.title()}
 
     def _outcome(self, result: dict[str, Any]) -> dict[str, Any]:

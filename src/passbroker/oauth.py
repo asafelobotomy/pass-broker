@@ -149,6 +149,14 @@ class BrokerOAuth(ConsentMixin):
                     return g["name"]
         return "unknown"
 
+    def taken_names(self) -> set[str]:
+        """Names in use by a connection, a sign-in about to become one, or a local assistant (lower-cased)."""
+        with self._lock:
+            self.store.load()
+            names = {str(g.get("name", "")).lower() for g in self.store.grants.values()}
+            names |= {name.lower() for _, name in self.codes.values()}
+        return names | {n.lower() for n in self.static_clients()}
+
     # ---- client registration --------------------------------------------------------
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
@@ -253,6 +261,11 @@ class BrokerOAuth(ConsentMixin):
                 raise TokenError("invalid_grant", "authorization code already used")
             name = entry[1]
             with self.store.transaction():
+                # Backstop for two sign-ins naming themselves the same at once.
+                taken = {str(g.get("name", "")).lower() for g in self.store.grants.values()} | {n.lower() for n in self.static_clients()}
+                base, n = name, 2
+                while name.lower() in taken:
+                    name, n = f"{base[:29]}-{n}", n + 1
                 grant_id = "g_" + secrets.token_urlsafe(9)
                 self.store.grants[grant_id] = {
                     "name": name,

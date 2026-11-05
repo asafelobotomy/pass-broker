@@ -246,6 +246,8 @@ def add_client(name: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,32}", name):
         raise OpError("assistant name: letters, digits, dot, dash and underscore only")
     clients = load_clients(clients_path())
+    if name.lower() in {c["name"].lower() for c in list_connections()}:
+        raise OpError(f"a connected app is already called {name}; pick another name")
     token = "pbc_" + secrets.token_urlsafe(32)
     clients[name] = hash_token(token)
     _write_clients(clients)

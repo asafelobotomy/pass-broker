@@ -200,3 +200,15 @@ def test_audit_log_chain_and_rotation(tmp_path):
     older.write_text("".join(lines))
     broken = verify(tmp_path / "audit.jsonl", keep=2)
     assert not broken["ok"] and broken["why"] == "doesn't follow the line before it"
+
+
+def test_bot_name_belongs_to_its_first_connection(tmp_path):
+    from passbroker.bots import BotError, Bots
+
+    bots = Bots(tmp_path / "bots.json")
+    bots.set_access("mailbot", {"logins": ["Mail"]})  # granted before it ever called
+    assert bots.check("claude", "mailbot", "list logins") == ("mailbot", False)
+    with pytest.raises(BotError, match="belongs to another connection"):
+        bots.check("grok", "mailbot", "list logins")  # another connection claiming the name
+    assert bots.check("claude", "mailbot", "list logins")[0] == "mailbot"
+    assert bots.forget("mailbot") and bots.check("grok", "mailbot", "list logins")[1]  # forgotten: free again

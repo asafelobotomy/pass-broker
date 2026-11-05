@@ -9,6 +9,7 @@ mod live_cb;
 mod prefs;
 mod preview;
 mod setup_cb;
+mod single;
 mod state;
 mod svc_mode;
 mod tray;
@@ -63,6 +64,7 @@ pub fn wiz(ui: &AppWindow) -> Wiz<'_> {
 }
 
 fn main() -> Result<(), slint::PlatformError> {
+    let Ok(_instance_lock) = single::claim() else { return Ok(()) };
     let ui = AppWindow::new()?;
     let app: Shared = Arc::new(App {
         cli: Cli::find(),

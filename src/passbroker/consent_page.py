@@ -95,6 +95,10 @@ class ConsentMixin:
                 return self._page("<h1>Too many wrong codes</h1><p>This sign-in was cancelled. Start again from the app.</p>", 403)
             return self._consent_form(p, error=f"That code doesn't match. {MAX_ATTEMPTS - p.attempts} tries left.")
         name = "".join(ch for ch in str(form.get("name", "")).strip() if ch.isalnum() or ch in "._-")[:32] or "remote"
+        if name.lower() in self.taken_names():
+            # Bots and their grants belong to a connection by name; two with one name would share them.
+            return self._consent_form(p, error=f"A connection or assistant called “{name}” already exists. Pick another name, "
+                                                "or revoke the old one in Pass Broker first.")
         with self._lock:
             self.pending.pop(p.id, None)
             code = AuthorizationCode(

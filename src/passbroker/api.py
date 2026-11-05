@@ -240,9 +240,15 @@ def c_funnel_stop(a) -> dict[str, Any]:
 
 
 def c_funnel_cleanup(a) -> dict[str, Any]:
-    """Turn off a Funnel left pointing at the broker's port (after a crash or reboot)."""
+    """Turn off a Funnel left pointing at the broker's port (after a crash or reboot).
+
+    Not while the background service runs: that Funnel is in use, and the service turns it
+    off itself when it stops."""
+    from . import service
     from .tailscale import funnel_points_at
 
+    if service.status().get("state") in ("active", "activating", "reloading"):
+        return {"cleaned": False, "reason": "the background service is running"}
     if not shutil.which("tailscale") or not funnel_points_at(a.port):
         return {"cleaned": False}
     c_funnel_stop(a)

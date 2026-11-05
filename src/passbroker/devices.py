@@ -64,6 +64,20 @@ class Device:
         return {"action": self.name, "kind": self.kind, "description": self.description, "returns_output": self.return_output}
 
 
+# A host as ssh would take it from you: a name (or ~/.ssh/config alias) or an IP address, never
+# anything ssh could read as an option (-oProxyCommand=... would run a command on this PC).
+SSH_HOST_RE = re.compile(r"[A-Za-z0-9_](?:[A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
+SSH_USER_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}")
+
+
+def _ssh_host_ok(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return bool(SSH_HOST_RE.fullmatch(host or ""))
+
+
 def _this_pc(host: str) -> bool:
     """True when `host` is this machine (by name, loopback, or one of its addresses)."""
     host = host.strip("[]").lower()
@@ -91,8 +105,10 @@ def validate(d: Device) -> None:
             raise DeviceError("enter the device's MAC address, like aa:bb:cc:dd:ee:ff")
         return
     if d.kind == "ssh":
-        if not d.host or not d.command or any(c in d.host for c in " /@"):
-            raise DeviceError("ssh needs a host (no user@ or spaces) and a command")
+        if not d.command or not _ssh_host_ok(d.host):
+            raise DeviceError("ssh needs a host name or address (as in your ~/.ssh/config; no user@, spaces or leading -) and a command")
+        if d.user and not SSH_USER_RE.fullmatch(d.user):
+            raise DeviceError("ssh user: letters, digits, dot, dash and underscore, not starting with -")
         target = d.host
     else:
         from urllib.parse import urlsplit
@@ -176,7 +192,7 @@ def run(d: Device, secret: str | None) -> dict[str, Any]:
         return {"ok": True}
     if d.kind == "ssh":
         argv = ["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10"]
-        argv += (["-p", str(d.port)] if d.port else []) + (["-l", d.user] if d.user else []) + [d.host, "--", d.command]
+        argv += (["-p", str(d.port)] if d.port else []) + (["-l", d.user] if d.user else []) + ["--", d.host, d.command]
         try:
             proc = subprocess.run(argv, input=((secret or "") + "\n").encode(), capture_output=True, timeout=120)
         except subprocess.TimeoutExpired:

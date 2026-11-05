@@ -102,6 +102,8 @@ broker is stopped) if you'd rather have a real window, for example to solve a CA
   in its menu stops everything. At login the app then starts in the tray, without a window.
 - **Theme**: follow the system, light or dark.
 
+Only one copy of the app runs at a time: opening it again brings the open window forward.
+
 The wizard drives the broker through `passbroker api …`, a JSON interface, and never handles the
 Proton Pass token except to pipe a pasted one straight into the keyring. It finds `passbroker` on
 your PATH, or this project's `.venv`, or wherever `$PASSBROKER_CLI` points.
@@ -351,6 +353,9 @@ Every tool takes a required `bot` argument: the calling bot's own name, such as 
   own Allow.
 - **The activity log** records the bot on every line.
 - **New bots** trigger a desktop notification the first time they call.
+- **A bot name belongs to the connection that first used it.** Another connection (another
+  assistant, or a second Grok connection) calling itself `mailbot` is refused. **Forget** the bot to
+  free its name. Connection names are unique too: the sign-in page asks for another name if one is taken.
 - **Switches:** the wizard's Bots list has an on/off switch per bot (or use
   `passbroker api bot-enable mailbot --off`). A switched-off bot's calls are refused.
 

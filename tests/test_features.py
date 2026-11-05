@@ -161,6 +161,20 @@ def test_device_actions_never_target_this_pc():
     devices_mod.validate(Device(name="nas", kind="wol", mac="aa:bb:cc:dd:ee:ff"))
 
 
+def test_ssh_host_cannot_be_an_ssh_option(monkeypatch):
+    """`-oProxyCommand=...` as a host would make ssh run a command on this PC."""
+    for host in ("-oProxyCommand=touch /tmp/x", "-p22", "user@nas", "nas;id", ""):
+        with pytest.raises(DeviceError, match="host name"):
+            devices_mod.validate(Device(name="x", kind="ssh", host=host, command="true"))
+    with pytest.raises(DeviceError, match="ssh user"):
+        devices_mod.validate(Device(name="x", kind="ssh", host="nas.example.org", user="-oX", command="true"))
+    seen = {}
+    monkeypatch.setattr(devices_mod.subprocess, "run", lambda argv, **k: seen.setdefault("argv", argv) and type("P", (), {"returncode": 0, "stdout": b"", "stderr": b""})())
+    devices_mod.run(Device(name="x", kind="ssh", host="nas.example.org", user="admin", command="uptime"), None)
+    argv = seen["argv"]
+    assert argv[argv.index("--") + 1 :] == ["nas.example.org", "uptime"]  # the host comes after --
+
+
 async def test_http_device_action_returns_only_done(setup, monkeypatch):
     broker, bots, _, _ = setup
     got = []

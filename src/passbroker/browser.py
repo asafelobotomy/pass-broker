@@ -29,6 +29,7 @@ from playwright.async_api import Route, WebSocketRoute, async_playwright
 
 from .browser_js import OTP_SELECTORS, USERNAME_SELECTORS  # noqa: F401  (re-exported for the broker)
 from .netguard import BLOCKED_SUFFIXES, _private
+from .netproxy import GuardProxy
 from .redact import Redactor
 from .session import BrowserError, Session  # noqa: F401
 
@@ -87,6 +88,15 @@ class Browser:
         # Set by the broker: why this session (`connection/bot`) may not show a URL, or None.
         # The flag says whether it's the tab's own page (True) or a frame inside it.
         self.page_refusal: Callable[[str, str, bool], Awaitable[str | None]] = _no_refusal
+        # Every browser connection goes through this, which is where private addresses are
+        # refused for good (redirects included); _guard below only gives earlier, clearer errors.
+        self.proxy = GuardProxy(self.refuse_address)
+
+    def refuse_address(self, host: str, ip: str) -> bool:
+        """May the browser not connect to `host`, resolved to `ip`?"""
+        if self._allow_private:
+            return False
+        return host == "localhost" or host.endswith(BLOCKED_SUFFIXES) or _private(ip)
 
     async def start(self) -> None:
         # Playwright talks to Chromium over a pipe: no DevTools port is opened
@@ -94,6 +104,7 @@ class Browser:
         gone = drop_debug_env()
         if gone:
             log.warning("ignored debugging variables that could log secrets: %s", ", ".join(gone))
+        await self.proxy.start()
         self._pw = await async_playwright().start()
         if not self._keep:
             self._browser = await self._pw.chromium.launch(**self._launch_opts())
@@ -103,7 +114,7 @@ class Browser:
     def _launch_opts(self) -> dict[str, object]:
         # channel="chromium" picks full Chromium's new headless mode over the
         # stripped-down headless shell, which more sites detect and block.
-        opts: dict[str, object] = {"headless": self._headless, "args": CHROMIUM_ARGS}
+        opts: dict[str, object] = {"headless": self._headless, "args": CHROMIUM_ARGS, "proxy": self.proxy.settings}
         if self._headless:
             opts["channel"] = "chromium"
         return opts
@@ -219,6 +230,7 @@ class Browser:
             closers.append(self._browser.close)
         if self._pw:
             closers.append(self._pw.stop)
+        closers.append(self.proxy.stop)
         for close in closers:
             try:
                 await close()

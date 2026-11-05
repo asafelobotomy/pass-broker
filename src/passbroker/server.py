@@ -90,7 +90,10 @@ class HostGuard:
         if scope["type"] == "http":
             host = next((v.decode("latin-1") for k, v in scope["headers"] if k == b"host"), "").lower()
             auth = next((v for k, v in scope["headers"] if k == b"authorization"), b"")
-            public = ":" not in host and host in self.hosts
+            # Tailscale marks every request that came in through Funnel, whatever Host it claims
+            # (Host: 127.0.0.1:8787 would otherwise pass for local); own-hostname setups go by Host.
+            funnel = any(k == b"tailscale-funnel-request" for k, _ in scope["headers"])
+            public = funnel or (":" not in host and host in self.hosts)
             if public and auth.lower().startswith(b"bearer pbc_"):
                 # fixed local-assistant tokens only work from this PC, never through Funnel
                 await send({"type": "http.response.start", "status": 401, "headers": [(b"content-type", b"text/plain")]})

@@ -157,9 +157,10 @@ def cmd_serve(args: argparse.Namespace) -> None:
     print(f"Pass Broker serving {issuer}/mcp", file=sys.stderr)
 
     async def main() -> None:
-        await browser.start()
-        await preview.start()
         try:
+            # Inside the try: if the browser can't start, Funnel must still be turned off below.
+            await browser.start()
+            await preview.start()
             # log_config=None: uvicorn logs through the root handlers, which scrub every record.
             server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, log_config=None, access_log=False))
             await server.serve()
