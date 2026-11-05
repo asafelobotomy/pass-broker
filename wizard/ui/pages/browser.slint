@@ -36,6 +36,9 @@ export component BrowserView inherits Card {
             image-fit: contain;
         }
         if Wiz.preview-image.width == 0: Muted {
+            x: 16px;
+            width: parent.width - 32px;
+            height: parent.height;
             text: !Wiz.running ? "Start the broker to see its browser here." : Wiz.browser-window ? "The browser has its own window; it's shown here too while a bot uses it." : "Nothing open: a bot's tab appears here while it uses the browser.";
             horizontal-alignment: center;
             vertical-alignment: center;

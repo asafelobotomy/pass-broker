@@ -51,6 +51,7 @@ class Session:
         self.last_use = time.monotonic()
         self.used = False
         self.lock = asyncio.Lock()
+        self.refused: str | None = None  # set by the browser when it cancels a page this bot may not see
         ctx.on("page", self._on_page)
 
     def _on_page(self, page: Page) -> None:
@@ -99,6 +100,12 @@ class Session:
             raise
         return {"url": self.page.url, "status": resp.status if resp else None, "title": await self.page.title()}
 
+    def _outcome(self, result: dict[str, Any]) -> dict[str, Any]:
+        if self.refused:
+            result["blocked"] = f"{self.refused}, so it didn't open; the tab stayed where it was"
+            self.refused = None
+        return result
+
     async def check_tab(self) -> None:
         """Leave a page the bot may not see. Sites that change pages without loading one
         (single-page apps) slip past the request guard; this catches them on the next look."""
@@ -142,10 +149,11 @@ class Session:
         loc = self._ref(ref)
         if not await loc.count():
             raise BrowserError("element is gone; take a new snapshot")
+        self.refused = None
         await loc.first.click(timeout=10000)
         await self.settle()
         await self.check_tab()
-        return {"url": self.page.url, "title": await self.page.title()}
+        return self._outcome({"url": self.page.url, "title": await self.page.title()})
 
     async def type_text(self, ref: str, text: str, submit: bool = False) -> dict[str, Any]:
         """The model's own text only: never into password or code fields, never a known secret."""
@@ -157,19 +165,21 @@ class Session:
             raise BrowserError("refused: that's a password or code field; use fill_login, fill_totp or fill_email_code")
         if self._redactor.contains_secret(text):
             raise BrowserError("refused: that text contains a secret the broker holds")
+        self.refused = None
         await loc.first.fill(text, timeout=10000)
         if submit:
             await loc.first.press("Enter")
             await self.settle()
             await self.check_tab()
-        return {"url": self.page.url}
+        return self._outcome({"url": self.page.url})
 
     async def press(self, key: str) -> dict[str, Any]:
         self.touch()
+        self.refused = None
         await self.page.keyboard.press(key)
         await self.settle()
         await self.check_tab()
-        return {"url": self.page.url}
+        return self._outcome({"url": self.page.url})
 
     async def screenshot(self, hide_personal: bool = True) -> bytes:
         self.touch()

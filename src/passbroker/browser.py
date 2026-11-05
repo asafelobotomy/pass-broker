@@ -183,10 +183,14 @@ class Browser:
         if parts.scheme in ("http", "https", "ws", "wss") and await self.blocked(parts.hostname or ""):
             await route.abort("blockedbyclient")
             return
-        if req.is_navigation_request() and await self.page_refusal(key, req.url, req.frame.parent_frame is None):
-            # "aborted" cancels the load as if it never happened: the tab stays on the page it was on.
-            await route.abort("aborted")
-            return
+        if req.is_navigation_request():
+            why = await self.page_refusal(key, req.url, req.frame.parent_frame is None)
+            if why:
+                if (s := self._sessions.get(key)) is not None:
+                    s.refused = why  # so the bot's click or key press can say why nothing happened
+                # "aborted" cancels the load as if it never happened: the tab stays on the page it was on.
+                await route.abort("aborted")
+                return
         await route.continue_()
 
     async def _ws_guard(self, ws: WebSocketRoute) -> None:

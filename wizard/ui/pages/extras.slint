@@ -29,6 +29,7 @@ export component KeysSection inherits VerticalLayout {
         Field { label: "Note for bots"; LineEdit { text <=> Wiz.k-note; placeholder-text: "e.g. the finance ledger"; } }
         HorizontalLayout { alignment: start; Button { text: "Add key"; primary: true; enabled: Wiz.k-name != "" && !Wiz.busy; clicked => { Wiz.key-add(); } } }
     }
+    Rectangle { vertical-stretch: 1; }
 }
 
 export component DevicesSection inherits VerticalLayout {
@@ -66,6 +67,7 @@ export component DevicesSection inherits VerticalLayout {
         if Wiz.d-kind != 0: Field { label: "Show output to bots"; Switch { text: "Return the command's or device's reply"; checked <=> Wiz.d-return; } }
         HorizontalLayout { alignment: start; Button { text: "Add device action"; primary: true; enabled: Wiz.d-name != "" && !Wiz.busy; clicked => { Wiz.device-add(); } } }
     }
+    Rectangle { vertical-stretch: 1; }
 }
 
 export component MailSection inherits VerticalLayout {
@@ -74,6 +76,7 @@ export component MailSection inherits VerticalLayout {
     Field { label: "Bridge login item"; ComboBox { model: Wiz.device-items; current-index <=> Wiz.mail-item; enabled: !Wiz.locked; } }
     Muted { text: "A vault item with your Bridge username and the password Bridge shows under its account settings (not your Proton password)."; font-size: 12px; }
     Field { label: "Bridge IMAP"; HorizontalLayout { spacing: 8px; LineEdit { text <=> Wiz.mail-host; enabled: !Wiz.locked; } SpinBox { minimum: 1; maximum: 65535; value <=> Wiz.mail-port; enabled: !Wiz.locked; } } }
-    Field { label: "Only codes newer than (min)"; SpinBox { minimum: 1; maximum: 60; value <=> Wiz.mail-age; enabled: !Wiz.locked; } }
+    Field { label: "Codes newer than (min)"; SpinBox { minimum: 1; maximum: 60; value <=> Wiz.mail-age; enabled: !Wiz.locked; } }
     if !Wiz.locked: HorizontalLayout { alignment: start; Button { text: "Save email-code settings"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.mail-save(); } } }
+    Rectangle { vertical-stretch: 1; }
 }

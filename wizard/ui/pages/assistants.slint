@@ -82,7 +82,7 @@ export component ControlPage inherits VerticalLayout {
             Badge { text: Wiz.broker-state; tint: Wiz.running ? Theme.ok : Theme.muted; y: 6px; }
             Text { text: Wiz.running ? Wiz.broker-url : "The broker is stopped. Nothing can reach it."; vertical-alignment: center; overflow: elide; }
             Rectangle { horizontal-stretch: 1; }
-            if Wiz.running && Wiz.broker-url != "": Button { text: "Test from internet"; clicked => { Wiz.probe(); } }
+            if Wiz.running && Wiz.broker-url != "" && Wiz.tunnel-mode != 2: Button { text: "Test from internet"; clicked => { Wiz.probe(); } }
             if !Wiz.running: Button { text: "Start broker"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.start-broker(); } }
             if Wiz.running: Button { text: "Stop"; clicked => { Wiz.stop-broker(); } }
             Button { text: "Emergency stop"; clicked => { Wiz.emergency-stop(); } }

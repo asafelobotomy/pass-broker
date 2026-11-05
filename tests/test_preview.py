@@ -1,6 +1,7 @@
 """The Control center's live view of the hidden browser."""
 
 import json
+import os
 
 from passbroker.preview import INDEX, WATCHING, Preview, frame_name
 
@@ -55,3 +56,40 @@ async def test_no_frame_while_a_secret_shows(make, site, tmp_path):  # noqa: F81
     text = (folder / INDEX).read_text()
     assert PASSWORD not in text and TOTP not in text
     await p.stop()
+
+
+def test_sigterm_runs_cleanup(tmp_path):
+    """systemd and the wizard stop the broker with SIGTERM; the live-view folder must be emptied."""
+    import signal
+    import socket
+    import subprocess
+    import sys
+    import time
+
+    run = tmp_path / "run"
+    run.mkdir(mode=0o700)
+    (tmp_path / "vault.json").write_text("[]")
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    env = {**os.environ, "XDG_RUNTIME_DIR": str(run), "XDG_CONFIG_HOME": str(tmp_path / "c"), "XDG_DATA_HOME": str(tmp_path / "d"),
+           "XDG_STATE_HOME": str(tmp_path / "s"), "PASSBROKER_TEST_MODE": "1"}
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "passbroker.cli", "serve", "--mock", str(tmp_path / "vault.json"), "--headless", "--port", str(port),
+         "--allow-http-localhost", "--insecure-auto-approve"],
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    folder = run / "passbroker" / "preview"
+    try:
+        for _ in range(100):
+            with socket.socket() as sock:
+                if sock.connect_ex(("127.0.0.1", port)) == 0:
+                    break
+            time.sleep(0.2)
+        (folder / WATCHING).touch()
+        (folder / "left-over.jpg").write_bytes(b"x")
+        proc.send_signal(signal.SIGTERM)
+        assert proc.wait(timeout=20) == 0
+    finally:
+        proc.kill()
+    assert not list(folder.iterdir())

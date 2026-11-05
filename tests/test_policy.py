@@ -102,9 +102,10 @@ async def test_blocked_pages_never_show(setup, site):  # noqa: F811
         await s.navigate(site.url("/account/payments", host="127.0.0.1"))
 
     await s.navigate(site.url("/shop", host="127.0.0.1"))
-    await s.page.click("#pay")
-    await s.page.wait_for_timeout(300)
-    assert s.page.url.endswith("/shop")  # the link's page never loaded
+    ref = next(e["ref"] for f in (await s.snapshot())["frames"] for e in f["elements"] if e.get("name") == "Payments")
+    result = await s.click(ref)
+    assert result["url"].endswith("/shop")  # the link's page never loaded
+    assert "blocked for this bot" in result["blocked"]  # and the bot is told why
 
     await s.page.click("#spa")  # the address changes without a page load
     with pytest.raises(BrowserError, match="went back"):

@@ -8,6 +8,7 @@ import getpass
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -169,7 +170,16 @@ def cmd_serve(args: argparse.Namespace) -> None:
                 # Funnel would otherwise stay on (and survive reboots) with nothing behind it.
                 subprocess.run(["tailscale", "funnel", "--https=443", "off"], capture_output=True, timeout=20)
 
+    # uvicorn shuts down on SIGTERM (systemd, the wizard's Stop) and then raises the
+    # signal again. With the default handler that kills the process before the
+    # `finally` above runs, skipping the browser sign-out, the live-view cleanup and
+    # turning Funnel off. Exiting normally instead lets all of it run.
+    signal.signal(signal.SIGTERM, _exit_on_term)
     asyncio.run(main())
+
+
+def _exit_on_term(signum: int, frame: object) -> None:
+    raise SystemExit(0)
 
 
 def main(argv: list[str] | None = None) -> None:
