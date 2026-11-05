@@ -174,7 +174,7 @@ export component AppWindow inherits Window {
         TouchArea { }
         Rectangle {
             width: 560px;
-            height: min(root.height - 80px, 700px);
+            height: min(root.height - 80px, 780px);
             border-radius: 14px;
             background: Theme.card;
             VerticalLayout {
@@ -199,6 +199,9 @@ export component AppWindow inherits Window {
                 Switch { text: "May open only these sites"; checked <=> Wiz.access-sites-limited; }
                 if Wiz.access-sites-limited: LineEdit { text <=> Wiz.access-sites; placeholder-text: "e.g. amazon.co.uk, royalmail.com"; }
                 if Wiz.access-sites-limited: Muted { text: "Plus the sites of its ticked logins. Subdomains are included. Pages it opens, links it clicks and redirects all stay on these sites."; font-size: 12px; wrap: word-wrap; }
+                Text { text: "Pages it may never see"; font-weight: 600; }
+                LineEdit { text <=> Wiz.access-blocked; placeholder-text: "e.g. amazon.co.uk/gp/your-account/payments, paypal.com/myaccount/settings*"; }
+                Muted { text: "A site and the start of a page's address; * matches anything; a site alone blocks all of it. The tab stays where it was, or goes back."; font-size: 12px; wrap: word-wrap; }
                 HorizontalLayout {
                     spacing: 10px;
                     alignment: end;

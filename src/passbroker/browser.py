@@ -57,8 +57,8 @@ def drop_debug_env() -> list[str]:
 MAX_SESSIONS = 12
 
 
-async def _any_site(key: str, host: str) -> bool:
-    return True
+async def _no_refusal(key: str, url: str, top: bool = True) -> str | None:
+    return None
 
 
 class Browser:
@@ -84,8 +84,9 @@ class Browser:
         self._idle_task: asyncio.Task | None = None
         self._create = asyncio.Lock()
         self.on_signed_out: Callable[[str, str], None] = lambda key, reason: None
-        # Set by the broker: may this session (`connection/bot`) open a page on this host?
-        self.site_allowed: Callable[[str, str], Awaitable[bool]] = _any_site
+        # Set by the broker: why this session (`connection/bot`) may not show a URL, or None.
+        # The flag says whether it's the tab's own page (True) or a frame inside it.
+        self.page_refusal: Callable[[str, str, bool], Awaitable[str | None]] = _no_refusal
 
     async def start(self) -> None:
         # Playwright talks to Chromium over a pipe: no DevTools port is opened
@@ -136,7 +137,7 @@ class Browser:
             ctx = await self._browser.new_context(accept_downloads=False, viewport=VIEWPORT, service_workers="block")
         await ctx.route("**/*", lambda route: self._guard(route, key))
         await ctx.route_web_socket("**/*", self._ws_guard)
-        s = Session(key, ctx, self._redactor, self.blocked, lambda host: self.site_allowed(key, host))
+        s = Session(key, ctx, self._redactor, self.blocked, lambda url: self.page_refusal(key, url, True))
         await s.open()
         return s
 
@@ -175,14 +176,16 @@ class Browser:
 
     async def _guard(self, route: Route, key: str) -> None:
         """Block every request (pages, frames, scripts, XHR) to this PC, LAN or tailnet,
-        and page loads (the top frame, popups included) outside the bot's site list."""
+        page loads (the top frame, popups included) outside the bot's site list, and
+        any page or frame it may not see."""
         req = route.request
         parts = urlsplit(req.url)
         if parts.scheme in ("http", "https", "ws", "wss") and await self.blocked(parts.hostname or ""):
             await route.abort("blockedbyclient")
             return
-        if req.is_navigation_request() and req.frame.parent_frame is None and not await self.site_allowed(key, parts.hostname or ""):
-            await route.abort("blockedbyclient")
+        if req.is_navigation_request() and await self.page_refusal(key, req.url, req.frame.parent_frame is None):
+            # "aborted" cancels the load as if it never happened: the tab stays on the page it was on.
+            await route.abort("aborted")
             return
         await route.continue_()
 

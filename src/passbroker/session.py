@@ -40,10 +40,10 @@ class Session:
         ctx: BrowserContext,
         redactor: Redactor,
         blocked: Callable[[str], Awaitable[bool]],
-        site_allowed: Callable[[str], Awaitable[bool]] | None = None,
+        refusal: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> None:
         self.key = key
-        self._site_allowed = site_allowed
+        self._refusal = refusal
         self.ctx = ctx
         self._redactor = redactor
         self._blocked = blocked
@@ -84,20 +84,40 @@ class Session:
         host = urlsplit(url).hostname or ""
         if await self._blocked(host):
             raise BrowserError(f"blocked: {host or 'that address'} is on this PC, your LAN or your tailnet")
-        if self._site_allowed and not await self._site_allowed(host):
-            raise BrowserError(f"not allowed: {host} isn't on this bot's site list; ask the user to add it in Pass Broker")
+        why = self._refusal and await self._refusal(url)
+        if why:
+            raise BrowserError(f"not allowed: {why}; ask the user to change it in Pass Broker")
         try:
             resp = await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
         except PWTimeout:
             raise BrowserError("page took too long to load") from None
         except Exception as e:
+            if "ERR_ABORTED" in str(e):
+                raise BrowserError("the page didn't load: it may have redirected to a site or page this bot may not open") from None
             if "ERR_BLOCKED_BY_CLIENT" in str(e):
-                raise BrowserError("blocked: that page redirected to this PC, your LAN, your tailnet or a site not on this bot's list") from None
+                raise BrowserError("blocked: that page redirected to this PC, your LAN or your tailnet") from None
             raise
         return {"url": self.page.url, "status": resp.status if resp else None, "title": await self.page.title()}
 
+    async def check_tab(self) -> None:
+        """Leave a page the bot may not see. Sites that change pages without loading one
+        (single-page apps) slip past the request guard; this catches them on the next look."""
+        if not self._refusal:
+            return
+        why = await self._refusal(self.page.url)
+        if not why:
+            return
+        try:
+            await self.page.go_back(wait_until="domcontentloaded", timeout=8000)
+        except Exception:
+            pass
+        if await self._refusal(self.page.url):
+            await self.page.goto("about:blank")
+        raise BrowserError(f"not allowed: {why}; went back to the previous page")
+
     async def snapshot(self) -> dict[str, Any]:
         self.touch()
+        await self.check_tab()
         frames = []
         for idx, frame in enumerate(self.frames()):
             try:
@@ -124,6 +144,7 @@ class Session:
             raise BrowserError("element is gone; take a new snapshot")
         await loc.first.click(timeout=10000)
         await self.settle()
+        await self.check_tab()
         return {"url": self.page.url, "title": await self.page.title()}
 
     async def type_text(self, ref: str, text: str, submit: bool = False) -> dict[str, Any]:
@@ -140,16 +161,19 @@ class Session:
         if submit:
             await loc.first.press("Enter")
             await self.settle()
+            await self.check_tab()
         return {"url": self.page.url}
 
     async def press(self, key: str) -> dict[str, Any]:
         self.touch()
         await self.page.keyboard.press(key)
         await self.settle()
+        await self.check_tab()
         return {"url": self.page.url}
 
     async def screenshot(self, hide_personal: bool = True) -> bytes:
         self.touch()
+        await self.check_tab()
         return await self.masked_capture(hide_personal=hide_personal)
 
     async def masked_capture(self, jpeg_quality: int | None = None, hide_personal: bool = False) -> bytes:

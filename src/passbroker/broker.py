@@ -70,7 +70,7 @@ class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
         self.devices = devices
         self.mail = mail
         if browser is not None:
-            browser.site_allowed = self.site_allowed
+            browser.page_refusal = self.page_refusal
 
     # ---- who may do what --------------------------------------------------------------
 

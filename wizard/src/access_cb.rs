@@ -47,6 +47,8 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
                 g.set_access_sites_limited(current["sites_limited"].as_bool().unwrap_or(false));
                 let sites: Vec<String> = current["sites"].as_array().into_iter().flatten().map(s).collect();
                 g.set_access_sites(sites.join(", ").into());
+                let blocked: Vec<String> = current["blocked_pages"].as_array().into_iter().flatten().map(s).collect();
+                g.set_access_blocked(blocked.join(", ").into());
                 g.set_access_items(ModelRc::new(VecModel::from(items)));
                 g.set_access_bot(bot.into());
             });
@@ -81,6 +83,7 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
                 "logins": [], "unlock": [], "keys": [], "devices": [], "email_codes": g.get_access_email(),
                 "personal_details": g.get_access_personal(), "sites_limited": g.get_access_sites_limited(),
                 "sites": g.get_access_sites().as_str(),
+                "blocked_pages": g.get_access_blocked().as_str(),
             });
             for row in g.get_access_items().iter().filter(|r| r.on) {
                 if let Some(list) = access[row.kind.as_str()].as_array_mut() {

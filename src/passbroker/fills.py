@@ -70,6 +70,7 @@ class FillsMixin:
         s.touch()
         page = s.page
         async with s.lock:
+            await s.check_tab()  # nothing is filled into a page the bot may not see
             try:
                 found = await s.find(PASSWORD_SELECTORS)
                 if found is None:
@@ -119,6 +120,7 @@ class FillsMixin:
         s.touch()
         page = s.page
         async with s.lock:
+            await s.check_tab()  # nothing is filled into a page the bot may not see
             try:
                 split = await s.find_many("input[maxlength='1']:visible", minimum=4)
                 found = None if split else await s.find(OTP_SELECTORS)

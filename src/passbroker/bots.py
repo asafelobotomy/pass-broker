@@ -35,8 +35,26 @@ MAX_SITES = 100
 def empty_access() -> dict[str, Any]:
     return {
         "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False,
-        "personal_details": False, "sites_limited": False, "sites": [],
+        "personal_details": False, "sites_limited": False, "sites": [], "blocked_pages": [],
     }
+
+
+def clean_page(text: str) -> str | None:
+    """`https://www.Amazon.co.uk/gp/Account?x=1` -> `www.amazon.co.uk/gp/account`; None if invalid.
+
+    A host, then optionally a path prefix in which `*` matches anything.
+    """
+    rest = str(text).strip().split("://", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    host_part, slash, path = rest.partition("/")
+    host = clean_site(host_part)
+    if host is None or not re.fullmatch(r"[\w./~*%+:@!$&'()=,;-]*", path):
+        return None
+    path = path.lower().rstrip("/") if path.strip("/*") else ""
+    return host + ("/" + path if path else "")
+
+
+def _list(value: Any) -> list[Any]:
+    return re.split(r"[\s,]+", value) if isinstance(value, str) else list(value or [])
 
 
 def clean_site(text: str) -> str | None:
@@ -134,13 +152,13 @@ class Bots:
         clean["email_codes"] = bool(access.get("email_codes", False))
         clean["personal_details"] = bool(access.get("personal_details", False))
         clean["sites_limited"] = bool(access.get("sites_limited", False))
-        sites = access.get("sites", [])
-        if isinstance(sites, str):
-            sites = re.split(r"[\s,]+", sites)
+        sites, pages = _list(access.get("sites")), _list(access.get("blocked_pages"))
         bad = [s for s in sites if str(s).strip() and clean_site(s) is None]
+        bad += [s for s in pages if str(s).strip() and clean_page(s) is None]
         if bad:
             raise BotError(f"not a website address: {str(bad[0])[:60]}")
         clean["sites"] = sorted({h for s in sites if (h := clean_site(s))})[:MAX_SITES]
+        clean["blocked_pages"] = sorted({h for s in pages if (h := clean_page(s))})[:MAX_SITES]
         with self._lock, self._edit() as data:
             entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
             entry["access"] = clean

@@ -80,6 +80,12 @@ ACCOUNT = """<!doctype html><title>Account of alice@example.com</title><h1>Your 
 <a id=away href="http://localhost:{port}/welcome">elsewhere</a>"""
 
 
+# A link to a page that may be blocked, and the same page reached the way
+# single-page apps do it: the address changes with no page load.
+SHOP = """<!doctype html><title>Shop</title><a id=pay href="/account/payments">Payments</a>
+<button id=spa onclick="history.pushState({}, '', '/account/payments'); document.title='Payments'">Payments (app)</button>"""
+
+
 class Site:
     def __init__(self) -> None:
         self.posts: list[tuple[str, dict[str, list[str]]]] = []
@@ -118,6 +124,8 @@ class Site:
                     "/split-stay": SPLIT_STAY,
                     "/welcome": "<!doctype html><title>Welcome</title><h1>Welcome, alice</h1>",
                     "/account": ACCOUNT.format(port=port),
+                    "/shop": SHOP,
+                    "/account/payments": "<!doctype html><title>Payments</title><p>Saved cards</p>",
                     "/framed": f'<!doctype html><title>Framed</title><iframe src="http://127.0.0.1:{port}/login" width=600 height=400></iframe>',
                 }
                 if self.path in pages:

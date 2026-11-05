@@ -90,3 +90,28 @@ async def test_site_list_limits_pages_and_links(setup, site):  # noqa: F811
     await s.navigate(site.url("/welcome"))
     with pytest.raises(BotError, match="website address"):
         bots.set_access("shopbot", {"sites": ["not a site!"]})
+
+
+async def test_blocked_pages_never_show(setup, site):  # noqa: F811
+    broker, bots = setup
+    bots.check("conn", "shopbot", "test")
+    bots.set_access("shopbot", {"blocked_pages": ["http://127.0.0.1/Account/Payments"], "logins": ["Test Site"]})
+    assert bots.access("shopbot")["blocked_pages"] == ["127.0.0.1/account/payments"]
+    s = await broker.browser.session("conn/shopbot")
+    with pytest.raises(BrowserError, match="blocked for this bot"):
+        await s.navigate(site.url("/account/payments", host="127.0.0.1"))
+
+    await s.navigate(site.url("/shop", host="127.0.0.1"))
+    await s.page.click("#pay")
+    await s.page.wait_for_timeout(300)
+    assert s.page.url.endswith("/shop")  # the link's page never loaded
+
+    await s.page.click("#spa")  # the address changes without a page load
+    with pytest.raises(BrowserError, match="went back"):
+        await s.snapshot()
+    assert not s.page.url.endswith("/payments")
+    await s.page.click("#spa")
+    with pytest.raises(BrowserError, match="blocked"):
+        await broker.fill_login("conn/shopbot", (await broker.list_logins("conn/shopbot"))[0]["handle"])
+    audit = broker.audit._path.read_text()
+    assert '"page_refused"' in audit
