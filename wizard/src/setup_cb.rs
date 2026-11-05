@@ -25,7 +25,7 @@ pub fn wire_setup(app: &Shared, ui: &AppWindow) {
             drop(st);
             if ok {
                 wiz(&ui).set_current(i);
-                if i == 3 { refresh_status(&a, &ui); }
+                if i == ACCESS as i32 { refresh_status(&a, &ui); }
                 if i == UNLOCK as i32 { crate::unlock_cb::refresh(&a, &ui); }
                 if i >= ASSISTANTS as i32 { poll_live(&a, &ui); }
             }

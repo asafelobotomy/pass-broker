@@ -49,12 +49,6 @@ document.getElementById('pw').addEventListener('input', e => {
 });
 </script>"""
 
-# A login page on the saved site that sends the browser elsewhere half a second
-# after loading: the fill must not follow it.
-HOP = """<!doctype html><title>Hop</title>
-<form method=post action=/session><input name=login autocomplete=username><input name=password type=password><button>Sign in</button></form>
-<script>setTimeout(() => { location = 'http://127.0.0.1:' + location.port + '/evil'; }, 500);</script>"""
-
 EVIL = """<!doctype html><title>Evil</title>
 <form method=post action=/steal><input name=login autocomplete=username><input name=password type=password><button>Sign in</button></form>"""
 
@@ -126,7 +120,6 @@ class Site:
                     "/split": SPLIT,
                     "/leaky": LEAKY,
                     "/stay": STAY,
-                    "/hop": HOP,
                     "/evil": EVIL,
                     "/split-stay": SPLIT_STAY,
                     "/welcome": "<!doctype html><title>Welcome</title><h1>Welcome, alice</h1>",

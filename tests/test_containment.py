@@ -89,7 +89,7 @@ async def test_pickers_and_dialogs_dont_reach_the_desktop(session, page_url):
         await s.press("Control+V")  # would paste your clipboard into the page
 
 
-@pytest.mark.skipif(not confine.available(), reason="bubblewrap not installed")
+@pytest.mark.needs("bwrap")
 def test_the_box_hides_your_files_and_session(tmp_path, monkeypatch):
     """A stand-in "chrome" reports what it can see from inside the box."""
     install = tmp_path / "chromium" / "chrome-linux64"

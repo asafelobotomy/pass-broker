@@ -15,9 +15,11 @@ def c_pair(a) -> dict[str, Any]:
     if a.close:
         path.unlink(missing_ok=True)
         return {"open": False}
+    from .oauth import PAIRING_WINDOW
+
     path.touch(mode=0o600)
     os.utime(path)
-    return {"open": True, "minutes": 10}
+    return {"open": True, "minutes": PAIRING_WINDOW // 60}
 
 
 def c_bot_access(a) -> dict[str, Any]:
@@ -114,8 +116,10 @@ def c_accounts_off(a) -> dict[str, Any]:
 
 
 def add_parsers(add) -> None:
+    from .defaults import VAULT
+
     add("accounts-setup", c_accounts_setup, (("--vault",), {"default": "Bot Accounts"}), (("--agent",), {"default": "passbroker"}),
-        (("--main-vault",), {"default": "Agent"}), (("--stay-signed-in",), {"action": "store_true"}))
+        (("--main-vault",), {"default": VAULT}), (("--stay-signed-in",), {"action": "store_true"}))
     add("accounts-off", c_accounts_off)
     add("pair", c_pair, (("--close",), {"action": "store_true"}))
     add("bot-access", c_bot_access, (("name",), {}))

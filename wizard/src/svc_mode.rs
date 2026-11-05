@@ -7,14 +7,13 @@
 use crate::api::{args, s};
 use crate::{bg, strings, toast, wiz, AppWindow, Shared};
 use serde_json::Value;
-use slint::{ComponentHandle, Model, SharedString, VecModel};
+use slint::{ComponentHandle, SharedString, VecModel};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
-const MAX_LOG_LINES: usize = 400;
 
 pub fn running(app: &Shared) -> bool {
     app.broker.lock().unwrap().is_some() || app.service_active.load(Ordering::SeqCst)
@@ -58,29 +57,14 @@ fn public_host(app: &Shared) -> String {
 }
 
 fn mcp_url(app: &Shared) -> String {
-    let public = public_host(app);
     let port = app.state.lock().unwrap().settings.port;
-    if public.is_empty() { format!("http://127.0.0.1:{port}/mcp") } else { format!("https://{public}/mcp") }
+    crate::runner::mcp_url(port, &public_host(app))
 }
 
 pub fn start(app: &Shared, ui: &AppWindow) {
     let settings = app.state.lock().unwrap().settings.clone();
     let public = public_host(app);
-    let mut cmd: Vec<String> = vec![
-        "service-install".into(), "--port".into(), settings.port.to_string(), "--vault".into(), settings.vault.clone(),
-        "--grant-minutes".into(), settings.grant_minutes.to_string(),
-    ];
-    if !public.is_empty() {
-        cmd.extend(["--public-host".into(), public.clone()]);
-    }
-    if !settings.browser_window {
-        cmd.push("--headless".into());
-    }
-    if settings.clear_sessions {
-        cmd.extend(["--idle-minutes".into(), settings.idle_minutes.to_string()]);
-    } else {
-        cmd.push("--keep-sessions".into());
-    }
+    let cmd = crate::runner::serve_args("service-install", &settings, &public);
     let url = mcp_url(app);
     wiz(ui).set_broker_state("starting".into());
     bg(app, ui, "Starting the background service…", move |app| {
@@ -193,15 +177,7 @@ fn follow_journal(app: &Shared, ui: &AppWindow) {
         *app.journal.lock().unwrap() = Some(child);
         let Some(out) = out else { return };
         for line in BufReader::new(out).lines().map_while(Result::ok) {
-            let _ = w.upgrade_in_event_loop(move |ui| {
-                let model = wiz(&ui).get_log_lines();
-                if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
-                    if vm.row_count() >= MAX_LOG_LINES {
-                        vm.remove(0);
-                    }
-                    vm.push(line.into());
-                }
-            });
+            let _ = w.upgrade_in_event_loop(move |ui| crate::runner::push_log(&ui, &line));
         }
     });
 }

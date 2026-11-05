@@ -111,7 +111,7 @@ fi
 
 echo "==> AppDir metadata"
 install -m755 "$SRC/packaging/appimage/AppRun" "$APPDIR/AppRun"
-install -m644 "$SRC/packaging/appimage/pass-broker.desktop" "$APPDIR/pass-broker.desktop"
+install -m644 "$SRC/packaging/pass-broker.desktop" "$APPDIR/pass-broker.desktop"
 install -m644 "$SRC/wizard/ui/icon.svg" "$APPDIR/pass-broker.svg"
 ln -sf pass-broker.svg "$APPDIR/.DirIcon"
 

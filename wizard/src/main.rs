@@ -7,6 +7,7 @@ mod broker_proc;
 mod extras_cb;
 mod live_cb;
 mod prefs;
+mod runner;
 mod preview;
 mod setup_cb;
 mod single;
@@ -18,7 +19,7 @@ mod view;
 
 use api::Cli;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
-use state::{WizardState, STEPS};
+use state::{WizardState, ASSISTANTS, STEPS, UNLOCK};
 use std::process::Child;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -105,8 +106,8 @@ fn main() -> Result<(), slint::PlatformError> {
     unlock_cb::wire_unlock(&app, &ui);
     // load data for whichever page the wizard opens on
     match wiz(&ui).get_current() {
-        4 => unlock_cb::refresh(&app, &ui),
-        p if p >= 5 => view::poll_live(&app, &ui),
+        p if p == UNLOCK as i32 => unlock_cb::refresh(&app, &ui),
+        p if p >= ASSISTANTS as i32 => view::poll_live(&app, &ui),
         _ => {}
     }
     extras_cb::wire_extras(&app, &ui);
@@ -137,7 +138,7 @@ fn main() -> Result<(), slint::PlatformError> {
             let Some(ui) = weak.upgrade() else { return };
             let page = wiz(&ui).get_current();
             svc_mode::poll(&app, &ui);
-            if page >= 5 && !app.polling.swap(true, Ordering::SeqCst) {
+            if page >= ASSISTANTS as i32 {
                 view::poll_live(&app, &ui);
             }
         });

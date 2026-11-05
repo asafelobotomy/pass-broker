@@ -1,3 +1,6 @@
+import os
+import shutil
+
 import keyring
 import pytest
 from keyring.backend import KeyringBackend
@@ -43,3 +46,14 @@ def fake_tool(tmp_path, name: str, script: str) -> str:
     path.write_text("#!/bin/sh\n" + script)
     path.chmod(0o755)
     return str(path)
+
+
+def pytest_runtest_setup(item):
+    """`@pytest.mark.needs("gpg")`: skip without the tool, except in CI, where it must be there
+    (a missing tool there is a broken setup that would otherwise pass unnoticed)."""
+    for mark in item.iter_markers("needs"):
+        missing = [t for t in mark.args if not shutil.which(t)]
+        if missing and os.environ.get("CI"):
+            pytest.fail(f"{', '.join(missing)} not installed, and CI should have it")
+        if missing:
+            pytest.skip(f"{', '.join(missing)} not installed")

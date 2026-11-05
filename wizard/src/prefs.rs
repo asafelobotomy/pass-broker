@@ -28,19 +28,23 @@ fn set_autostart(prefs: &AppPrefs) -> Result<(), String> {
         Some(appimage) => appimage,
         None => std::env::current_exe().map_err(|e| format!("couldn't find this program: {e}"))?,
     };
-    let exe = exe.to_string_lossy();
+    // In the tray at login rather than a window popping up, when there is a tray.
+    let entry = autostart_entry(&exe.to_string_lossy(), prefs.tray)?;
+    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+    fs::write(&path, entry).map_err(|e| format!("couldn't write {}: {e}", path.display()))
+}
+
+/// The desktop entry that opens `exe` at login.
+fn autostart_entry(exe: &str, minimized: bool) -> Result<String, String> {
     if exe.contains(['"', '\\', '`', '$', '\n']) {
         return Err("this program's path has characters an autostart entry can't hold".into());
     }
     let exe = exe.replace('%', "%%"); // % starts a field code (%f, %u...) in desktop entries
-    // In the tray at login rather than a window popping up, when there is a tray.
-    let args = if prefs.tray { " --minimized" } else { "" };
-    let entry = format!(
+    let args = if minimized { " --minimized" } else { "" };
+    Ok(format!(
         "[Desktop Entry]\nType=Application\nName=Pass Broker\nComment=Sign-ins without sharing secrets\n\
          Exec=\"{exe}\"{args}\nIcon=security-high\nTerminal=false\nX-GNOME-Autostart-enabled=true\n"
-    );
-    fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
-    fs::write(&path, entry).map_err(|e| format!("couldn't write {}: {e}", path.display()))
+    ))
 }
 
 fn apply_tray(app: &Shared, ui: &AppWindow, on: bool) -> Result<(), String> {
@@ -129,4 +133,24 @@ pub fn start_broker_if_wanted(app: &Shared, ui: &AppWindow) {
 /// Closing the window: keep running in the tray, or quit.
 pub fn close_to_tray(app: &Shared) -> bool {
     app.state.lock().unwrap().prefs.close_to_tray && tray::active()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::autostart_entry;
+
+    #[test]
+    fn autostart_entry_quotes_the_path_and_escapes_field_codes() {
+        let e = autostart_entry("/home/me/Apps/Pass Broker 100%.AppImage", true).unwrap();
+        assert!(e.contains("Exec=\"/home/me/Apps/Pass Broker 100%%.AppImage\" --minimized\n"));
+        assert!(e.starts_with("[Desktop Entry]\n") && e.contains("Type=Application\n"));
+        assert!(!autostart_entry("/opt/app", false).unwrap().contains("--minimized"));
+    }
+
+    #[test]
+    fn autostart_entry_refuses_paths_it_cant_quote() {
+        for bad in ["/a\"b", "/a$(x)", "/a`x`", "/a\\b", "/a\nExec=evil"] {
+            assert!(autostart_entry(bad, false).is_err(), "{bad}");
+        }
+    }
 }

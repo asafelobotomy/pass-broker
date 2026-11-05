@@ -42,8 +42,9 @@ the threat model, what protects what, what it can't stop, and how to report a vu
 
 ## AppImage
 
-One file with the wizard, the broker and a private Python, for any desktop Linux with
-glibc 2.35 or newer (Ubuntu 22.04, Debian 13, Fedora 36 and later):
+One file with the wizard, the broker and a private Python 3.12, for any desktop Linux with
+glibc 2.35 or newer (Ubuntu 22.04, Debian 13, Fedora 36 and later). (Development uses the Python
+in `.python-version`; CI tests 3.11 to 3.14.)
 
 ```bash
 chmod +x Pass_Broker-x86_64.AppImage
@@ -130,11 +131,11 @@ install -Dm755 wizard/target/release/passbroker-wizard ~/.local/bin/passbroker-w
 ```
 
 ```bash
-install -Dm644 packaging/passbroker.desktop ~/.local/share/applications/passbroker.desktop
+install -Dm644 packaging/pass-broker.desktop ~/.local/share/applications/pass-broker.desktop
 ```
 
 ```bash
-install -Dm644 packaging/passbroker.svg ~/.local/share/icons/hicolor/scalable/apps/passbroker.svg
+install -Dm644 wizard/ui/icon.svg ~/.local/share/icons/hicolor/scalable/apps/pass-broker.svg
 ```
 
 ## Set up from the command line
@@ -149,8 +150,10 @@ curl -fsSL https://proton.me/download/pass-cli/install.sh | bash
 uv tool install --from . passbroker
 ```
 
+Then the browser it drives, at the version its own Playwright expects:
+
 ```bash
-uvx --from playwright playwright install chromium
+passbroker api install-browser
 ```
 
 ### 2. Make an Agent vault and an agent token

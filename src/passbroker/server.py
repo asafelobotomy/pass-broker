@@ -24,6 +24,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from .bots import Bots
 from .broker import Broker
+from .defaults import PORT
 from .oauth import SCOPE, BrokerOAuth
 from .redact import Redactor
 from .tools import register_tools
@@ -162,7 +163,7 @@ def build_server(broker: Broker, redactor: Redactor, oauth: BrokerOAuth, bots: B
     return mcp
 
 
-def build_app(mcp: MCPServer, public_hosts: list[str], port: int = 8787) -> Any:
+def build_app(mcp: MCPServer, public_hosts: list[str], port: int = PORT) -> Any:
     local = ["127.0.0.1:*", "localhost:*"]
     security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,

@@ -115,20 +115,14 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
             let Some(ui) = w.upgrade() else { return };
             bg(&a, &ui, "Opening the pairing window…", |app| app.cli.call(&args(["pair"]), None), |ui, _, r| {
                 let note = match r {
-                    Ok(_) => format!("Pairing is open until {}. Ask Grok to connect now; one app can connect, then it closes.", in_minutes(10)),
+                    Ok(v) => format!(
+                        "Pairing is open until {}. Ask Grok to connect now; one app can connect, then it closes.",
+                        crate::runner::clock_plus(&crate::state::now(), v["minutes"].as_i64().unwrap_or(10)),
+                    ),
                     Err(e) => e,
                 };
                 wiz(ui).set_pairing_note(note.into());
             });
         }
     });
-}
-
-fn in_minutes(m: i64) -> String {
-    let now = crate::state::now();
-    let (date, time) = now.split_once(' ').unwrap_or(("", "00:00"));
-    let (h, mi) = time.split_once(':').unwrap_or(("0", "0"));
-    let total = h.parse::<i64>().unwrap_or(0) * 60 + mi.parse::<i64>().unwrap_or(0) + m;
-    let _ = date;
-    format!("{:02}:{:02}", (total / 60) % 24, total % 60)
 }

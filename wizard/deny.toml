@@ -3,9 +3,17 @@
 targets = ["x86_64-unknown-linux-gnu"]
 
 [advisories]
-# Unmaintained crates are reported, but only ones we depend on directly fail the check.
-unmaintained = "workspace"
-ignore = []
+# Every unmaintained crate fails the check, except these, which come in through Slint and the
+# tray (ksni), both at their latest versions: nothing to move to yet. cargo-deny warns when one
+# of them is no longer used, so it can come off this list.
+unmaintained = "all"
+ignore = [
+    { id = "RUSTSEC-2026-0370", reason = "zvariant, via ksni and Slint's accessibility (zbus)" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names, via ksni and Slint's accessibility (zbus)" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive, via ksni and Slint's accessibility (zbus)" },
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils, via slint-macros and slint-build (spin_on)" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser, via winit's window decorations (sctk-adwaita)" },
+]
 
 [licenses]
 allow = [

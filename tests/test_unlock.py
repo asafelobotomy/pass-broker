@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -44,7 +43,7 @@ def _action(home, preset, **kw):
     return Action(name=preset, preset=preset, item="Secure files", folders=[str(home / "Secure")], output_dir=str(home / "Unlocked"), **kw)
 
 
-@pytest.mark.skipif(not shutil.which("gpg"), reason="gpg not installed")
+@pytest.mark.needs("gpg")
 async def test_gpg_decrypt_stays_on_pc_by_default(home, broker):
     b, unl, _ = broker
     _make(home, "gpg", "gpg", "--batch", "--pinentry-mode", "loopback", "--passphrase-fd", "0", "--symmetric", "-o", "plans.txt.gpg", "plain.txt")
@@ -58,7 +57,7 @@ async def test_gpg_decrypt_stays_on_pc_by_default(home, broker):
     assert PASS not in json.dumps(res) and PASS not in (home / "audit.jsonl").read_text()
 
 
-@pytest.mark.skipif(not shutil.which("openssl"), reason="openssl not installed")
+@pytest.mark.needs("openssl")
 async def test_openssl_returns_content_when_allowed_and_cleans_up_failures(home, broker):
     b, unl, _ = broker
     _make(home, "openssl", "openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt", "-in", "plain.txt", "-out", "notes.enc", "-pass", "stdin")
@@ -70,7 +69,7 @@ async def test_openssl_returns_content_when_allowed_and_cleans_up_failures(home,
     assert not bad["ok"] and "result_path" not in bad and not (home / "Unlocked" / "junk").exists()
 
 
-@pytest.mark.skipif(not shutil.which("7z"), reason="7z not installed")
+@pytest.mark.needs("7z")
 async def test_7z_extract_and_list(home, broker):
     b, unl, _ = broker
     subprocess.run(["7z", "a", f"-p{PASS}", "-mhe=on", "box.7z", "plain.txt"], cwd=home / "Secure", capture_output=True, check=True)
@@ -116,7 +115,7 @@ async def test_denied_unlock_reads_no_secret(home, broker):
         await b.unlock_file("conn1/mailbot", "nope", "x.gpg")
 
 
-@pytest.mark.skipif(not shutil.which("7z"), reason="7z not installed")
+@pytest.mark.needs("7z")
 async def test_archive_with_a_link_is_refused(home, broker):
     b, unl, _ = broker
     (home / "target.txt").write_text("outside")
@@ -130,7 +129,7 @@ async def test_archive_with_a_link_is_refused(home, broker):
     assert not any((home / "Unlocked").rglob("evil-link"))
 
 
-@pytest.mark.skipif(not shutil.which("openssl"), reason="openssl not installed")
+@pytest.mark.needs("openssl")
 async def test_planted_link_in_output_folder_is_not_followed(home, broker):
     b, unl, _ = broker
     _make(home, "openssl", "openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-salt", "-in", "plain.txt", "-out", "job.enc", "-pass", "stdin")

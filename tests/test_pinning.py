@@ -1,6 +1,5 @@
 """Pinned self-signed certificates for home devices and Proton Mail Bridge."""
 
-import shutil
 import ssl
 import subprocess
 import threading
@@ -13,7 +12,7 @@ from passbroker.devices import Device, DeviceStore
 from passbroker.mailcode import MailSettings, fetch_code
 from passbroker.tlspin import fingerprint
 
-pytestmark = pytest.mark.skipif(not shutil.which("openssl"), reason="openssl not installed")
+pytestmark = pytest.mark.needs("openssl")
 
 
 def _self_signed(folder, name, expired=False):

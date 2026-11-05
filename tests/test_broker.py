@@ -182,20 +182,33 @@ async def test_navigate_refuses_other_schemes(make):
             await (await broker.browser.session("grok")).navigate(url)
 
 
-class SlowApprover(StaticApprover):
-    def ask(self, title, body):
-        import time
+class NavigatingApprover(StaticApprover):
+    """Allows only once the page has gone to `to`: the move always happens during the approval."""
 
-        time.sleep(1.5)  # long enough for the page to navigate away
+    page = loop = to = None
+
+    def ask(self, title, body):
+        import asyncio
+
+        async def go():
+            await self.page.evaluate("to => { location.href = to; }", self.to)
+            await self.page.wait_for_url("**/evil", timeout=10000)
+
+        asyncio.run_coroutine_threadsafe(go(), self.loop).result(timeout=15)
         return super().ask(title, body)
 
 
 async def test_page_navigating_away_during_approval_gets_nothing(make, site):
-    broker, logins, _ = await make(approver=SlowApprover(True))
-    await (await broker.browser.session("grok")).navigate(site.url("/hop"))
-    with pytest.raises(BrokerError):
+    import asyncio
+
+    approver = NavigatingApprover(True)
+    broker, logins, _ = await make(approver=approver)
+    s = await broker.browser.session("grok")
+    approver.page, approver.loop, approver.to = s.page, asyncio.get_running_loop(), site.url("/evil", host="127.0.0.1")
+    await s.navigate(site.url("/login"))
+    with pytest.raises(BrokerError, match="127.0.0.1|changed"):
         await broker.fill_login("grok", logins["Test Site"])
-    await (await broker.browser.session("grok")).page.wait_for_timeout(500)
+    assert len(approver.asked) == 1 and s.page.url.endswith("/evil")  # it was asked, and the page did move
     assert not any(path == "/steal" for path, _ in site.posts)
     assert not any(PASSWORD in str(form) for _, form in site.posts)
 

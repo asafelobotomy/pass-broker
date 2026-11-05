@@ -286,7 +286,10 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
             s.add_argument(*args_, **kwargs)
         s.set_defaults(api_func=fn)
 
-    vault = (("--vault",), {"default": "Agent"})
+    from .defaults import PORT, SERVE_OPTIONS, VAULT
+
+    vault = (("--vault",), {"default": VAULT})
+    port = (("--port",), {"type": int, "default": PORT})
     add("status", c_status)
     add("session", c_session)
     add("logout", c_logout)
@@ -311,18 +314,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     add("audit", c_audit, (("--limit",), {"type": int, "default": 200}))
     add("audit-verify", c_audit_verify)
     add("tailscale", c_tailscale)
-    add("funnel-start", c_funnel_start, (("--port",), {"type": int, "default": 8787}))
+    add("funnel-start", c_funnel_start, port)
     add("funnel-stop", c_funnel_stop)
-    add("funnel-cleanup", c_funnel_cleanup, (("--port",), {"type": int, "default": 8787}))
+    add("funnel-cleanup", c_funnel_cleanup, port)
     add("install-browser", c_install_browser)
-    add("serve-command", c_serve_command, (("--port",), {"type": int, "default": 8787}), vault,
-        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 2}),
-        (("--headless",), {"action": "store_true"}), (("--keep-sessions",), {"action": "store_true"}),
-        (("--idle-minutes",), {"type": float, "default": 15}))
+    add("serve-command", c_serve_command, *SERVE_OPTIONS)
     add("clear-browser", c_clear_browser)
     from . import api_config, api_service
 
-    api_service.add_parsers(add, vault)
+    api_service.add_parsers(add)
     api_config.add_parsers(add)
     api.set_defaults(func=run)
 

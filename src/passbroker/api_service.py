@@ -33,14 +33,10 @@ def c_service_control(a) -> dict[str, Any]:
     return service.status()
 
 
-def add_parsers(add, vault) -> None:
-    serve_opts = (
-        (("--port",), {"type": int, "default": 8787}), vault,
-        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 2}),
-        (("--headless",), {"action": "store_true"}), (("--keep-sessions",), {"action": "store_true"}),
-        (("--idle-minutes",), {"type": float, "default": 15}),
-    )
-    add("service-install", c_service_install, *serve_opts)
+def add_parsers(add) -> None:
+    from .defaults import SERVE_OPTIONS
+
+    add("service-install", c_service_install, *SERVE_OPTIONS)
     add("service-uninstall", c_service_uninstall)
     add("service-status", c_service_status)
     add("service-control", c_service_control, (("action",), {"choices": ["start", "stop", "restart"]}))

@@ -60,8 +60,10 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: wizard
-      - name: Libraries Slint and the clipboard link against
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libxkbcommon-dev libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      - name: Libraries Slint and the clipboard link against, and the desktop-file checker
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libfontconfig1-dev libxkbcommon-dev libwayland-dev libxcb1-dev libxcb-shape0-dev libxcb-xfixes0-dev desktop-file-utils
+      - name: Desktop file
+        run: desktop-file-validate ../packaging/pass-broker.desktop
       - name: Clippy
         run: cargo clippy --locked --release -- -D warnings
       - name: Tests

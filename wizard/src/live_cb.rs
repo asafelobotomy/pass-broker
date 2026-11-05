@@ -142,7 +142,6 @@ pub fn wire_live(app: &Shared, ui: &AppWindow) {
             });
         }
     });
-    let _ = a;
 }
 
 

@@ -1,15 +1,15 @@
 //! Starting and stopping `passbroker serve` (and Tailscale Funnel with it).
 
 use crate::api::{args, s};
+use crate::runner::{mcp_url, push_log, serve_args};
 use crate::{bg, open_url, strings, toast, wiz, App, AppWindow, Shared};
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::sync::atomic::Ordering;
 use crate::view::render_steps;
 use std::io::{BufRead, BufReader};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-const MAX_LOG_LINES: usize = 400;
 
 
 pub fn start_broker(app: &Shared, ui: &AppWindow) {
@@ -48,15 +48,9 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
             1 => public = settings.own_host.clone(),
             _ => {}
         }
-        let mut cmd: Vec<String> = vec![
-            "serve-command".into(), "--port".into(), settings.port.to_string(), "--vault".into(), settings.vault.clone(),
-            "--grant-minutes".into(), settings.grant_minutes.to_string(),
-        ];
-        if !public.is_empty() { cmd.extend(["--public-host".into(), public.clone()]); }
-        if !settings.browser_window { cmd.push("--headless".into()); }
-        if settings.clear_sessions { cmd.extend(["--idle-minutes".into(), settings.idle_minutes.to_string()]); } else { cmd.push("--keep-sessions".into()); }
+        let cmd = serve_args("serve-command", &settings, &public);
         let argv: Vec<String> = app.cli.call(&cmd, None)?["argv"].as_array().ok_or("bad serve command")?.iter().map(s).collect();
-        let url = if public.is_empty() { format!("http://127.0.0.1:{}/mcp", settings.port) } else { format!("https://{public}/mcp") };
+        let url = mcp_url(settings.port, &public);
         Ok((url, argv))
     }, |ui, app, r| {
         let (url, argv) = match r {
@@ -86,18 +80,13 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
         };
         let lines = Rc::new(VecModel::<SharedString>::default());
         wiz(ui).set_log_lines(ModelRc::from(lines.clone()));
-        let started = Instant::now();
         for pipe in [child.stdout.take().map(|p| Box::new(p) as Box<dyn std::io::Read + Send>), child.stderr.take().map(|p| Box::new(p) as Box<dyn std::io::Read + Send>)].into_iter().flatten() {
             let (w, app2, url2) = (ui.as_weak(), app.clone(), url.clone());
             std::thread::spawn(move || {
                 for line in BufReader::new(pipe).lines().map_while(Result::ok) {
                     let (app3, url3) = (app2.clone(), url2.clone());
                     let _ = w.upgrade_in_event_loop(move |ui| {
-                        let model = wiz(&ui).get_log_lines();
-                        if let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() {
-                            if vm.row_count() >= MAX_LOG_LINES { vm.remove(0); }
-                            vm.push(line.clone().into());
-                        }
+                        push_log(&ui, &line);
                         if line.contains("Application startup complete") || line.contains("Uvicorn running") {
                             wiz(&ui).set_broker_state("running".into());
                             wiz(&ui).set_broker_url(url3.into());
@@ -108,7 +97,6 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
             });
         }
         *app.broker.lock().unwrap() = Some(child);
-        let _ = started;
         // notice if the broker exits on its own
         let (w, app2) = (ui.as_weak(), app.clone());
         std::thread::spawn(move || loop {

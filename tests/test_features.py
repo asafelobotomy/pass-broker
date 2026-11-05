@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-import shutil
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -134,7 +133,7 @@ def test_code_extraction():
     assert site_domains(["https://account.proton.me", "https://www.github.com/login", "https://shop.example.co.uk"]) == {"proton.me", "github.com", "example.co.uk"}
 
 
-@pytest.mark.skipif(not shutil.which("gpg"), reason="gpg not installed")
+@pytest.mark.needs("gpg")
 async def test_encrypt_then_decrypt_with_a_vault_key(setup):
     broker, bots, _, approver = setup
     broker.keys.add(Key(name="ledger", item="Ledger key", note="the finance ledger"))

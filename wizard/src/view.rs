@@ -133,7 +133,12 @@ pub fn refresh_status(app: &Shared, ui: &AppWindow) {
     });
 }
 
+/// Connections, bots and the audit log, off the UI thread. One at a time: the timer and the
+/// page callbacks both ask, and a second request while one runs is dropped.
 pub fn poll_live(app: &Shared, ui: &AppWindow) {
+    if app.polling.swap(true, Ordering::SeqCst) {
+        return;
+    }
     let (app, weak) = (app.clone(), ui.as_weak());
     std::thread::spawn(move || {
         let conns = app.cli.call(&args(["connections"]), None);
@@ -163,6 +168,8 @@ pub fn audit_row(e: &Value) -> AuditRow {
         "bot_refused" => "refused".into(),
         "bot_new" => "new bot".into(),
         "fill_login" => s(&e["step"]),
+        "create_login" => "account made".into(),
+        "fill_signup" => "signed up".into(),
         "list_logins" => format!("{} logins", s(&e["count"])),
         _ => String::new(),
     };
@@ -182,3 +189,21 @@ pub fn audit_row(e: &Value) -> AuditRow {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::audit_row;
+    use serde_json::json;
+
+    #[test]
+    fn audit_rows_read_the_log_fields() {
+        let row = audit_row(&json!({"ts": "2026-11-05T14:12:35.123+00:00", "event": "approval", "client": "grok/mailbot",
+                                    "item": "Shop", "host": "shop.example", "allowed": true}));
+        assert_eq!(row.ts, "2026-11-05 14:12");
+        assert_eq!((row.who.as_str(), row.event.as_str(), row.result.as_str()), ("grok/mailbot", "approval", "allowed"));
+        assert_eq!(audit_row(&json!({"event": "approval", "allowed": false})).result, "denied");
+        let made = audit_row(&json!({"event": "create_login", "client": "grok/maker", "item": "shop.example (maker)"}));
+        assert_eq!((made.event.as_str(), made.result.as_str()), ("create login", "account made"));
+        let oauth = audit_row(&json!({"event": "oauth_denied", "name": "Grok", "app": "cursor.com"}));
+        assert_eq!((oauth.who.as_str(), oauth.host.as_str()), ("Grok", "cursor.com"));
+    }
+}

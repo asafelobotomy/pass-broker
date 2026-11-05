@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import ops
+from . import defaults, ops
 from .ops import dirs as _dirs
 from .ops import harden_process
 from .ops import load_token as _load_token
@@ -177,7 +177,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
                     logging.getLogger("passbroker").warning("shutdown: %s", type(e).__name__)
             if args.manage_funnel:
                 # Funnel would otherwise stay on (and survive reboots) with nothing behind it.
-                subprocess.run(["tailscale", "funnel", "--https=443", "off"], capture_output=True, timeout=20)
+                subprocess.run(ops.funnel_stop_command(), capture_output=True, timeout=20)
 
     # uvicorn shuts down on SIGTERM (systemd, the wizard's Stop) and then raises the
     # signal again. With the default handler that kills the process before the
@@ -192,7 +192,10 @@ def _exit_on_term(signum: int, frame: object) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from importlib.metadata import version
+
     p = argparse.ArgumentParser(prog="passbroker", description="Let AI assistants sign in with Proton Pass without seeing secrets.")
+    p.add_argument("--version", action="version", version=f"passbroker {version('passbroker')}")
     sub = p.add_subparsers(required=True)
 
     s = sub.add_parser("set-token", help="store your Proton Pass access token in the system keyring")
@@ -211,20 +214,20 @@ def main(argv: list[str] | None = None) -> None:
     s.set_defaults(func=cmd_list_clients)
 
     s = sub.add_parser("check", help="log in with the stored token and list what assistants will see")
-    s.add_argument("--vault", default="Agent")
+    s.add_argument("--vault", default=defaults.VAULT)
     s.add_argument("--pass-cli", default="pass-cli")
     s.set_defaults(func=cmd_check)
 
     s = sub.add_parser("serve", help="run the broker on 127.0.0.1")
-    s.add_argument("--vault", default="Agent", help="Proton Pass vault the token can read (default: Agent)")
-    s.add_argument("--port", type=int, default=8787)
+    s.add_argument("--vault", default=defaults.VAULT, help=f"Proton Pass vault the token can read (default: {defaults.VAULT})")
+    s.add_argument("--port", type=int, default=defaults.PORT)
     s.add_argument("--public-host", action="append", default=[], help="tunnel hostname allowed in the Host header, e.g. pass.example.com")
-    s.add_argument("--grant-minutes", type=float, default=2, help="how long one Allow lasts for the same item and site (0 = ask every time)")
+    s.add_argument("--grant-minutes", type=float, default=defaults.GRANT_MINUTES, help="how long one Allow lasts for the same item and site (0 = ask every time)")
     s.add_argument("--approval-timeout", type=int, default=60)
     s.add_argument("--headless", action="store_true", help="run the browser without a window; the wizard's Control center shows it instead")
     s.add_argument("--pass-cli", default="pass-cli")
     s.add_argument("--keep-sessions", action="store_true", help="keep sites signed in between runs (default: fresh browser each run)")
-    s.add_argument("--idle-minutes", type=float, default=15, help="sign the browser out of everything after this long unused (0 = never)")
+    s.add_argument("--idle-minutes", type=float, default=defaults.IDLE_MINUTES, help="sign the browser out of everything after this long unused (0 = never)")
     s.add_argument("--allow-subdomains", action="store_true", help="let a saved site match its subdomains too")
     s.add_argument("--show-usernames", action="store_true", help="show assistants full usernames instead of masked ones")
     s.add_argument("--oauth-redirect-host", action="append", default=[], help="host allowed to receive sign-in codes (default: Cursor's)")

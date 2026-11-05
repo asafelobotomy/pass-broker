@@ -15,6 +15,11 @@ another bot, or someone on the internet see a password, passphrase, code or
 token; act without your approval; reach this PC's or your LAN's services through
 the broker; or tamper with its records unnoticed.
 
+## Supported versions
+
+Fixes go into the latest release only, so please update before reporting. Check yours in
+**Settings › About** or with `passbroker --version`.
+
 ## Threat model
 
 The broker assumes the AI model may be careless or prompt-injected, the web

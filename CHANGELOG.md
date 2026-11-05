@@ -1,0 +1,78 @@
+# Changelog
+
+Each release on [GitHub](https://github.com/asafelobotomy/pass-broker/releases) has the AppImage
+and fuller notes. Versions follow [semantic versioning](https://semver.org): before 1.0, a new
+minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes.
+
+## Unreleased
+
+- `passbroker --version`; SECURITY.md says which versions get fixes.
+- One desktop file and icon name (`pass-broker`), checked in CI; the README installs the
+  browser with the broker's own command, so it matches the installed Playwright.
+- The audit view names account events (made, signed up).
+- Tests for the JSON every offline `passbroker api` command returns (the wizard depends on it),
+  for reading email codes from a fake Proton Mail Bridge, and for the wizard's serve command,
+  autostart entry, clock and audit rows.
+- Tests that relied on timing now wait for what they check; tools the tests need (gpg,
+  openssl, 7z, bubblewrap) fail in CI instead of being skipped.
+- Tidier code: one set of serve defaults, one serve-command builder and log view in the
+  wizard, the pass-cli steps in their own module, and dead code removed. Only one live-view
+  refresh runs at a time.
+- Unmaintained Rust crates are tracked by advisory ID; any new one fails CI.
+
+## 0.3.0
+
+- **Bots can make their own accounts**, without seeing the passwords. You approve each one;
+  Proton Pass generates the password and saves the login in a vault of its own (**Bot
+  Accounts**), and the bot fills in the sign-up form. The Agent vault stays read-only to the
+  broker.
+- One Allow lasts 2 minutes everywhere (the command line said 10).
+- Settings › About; `THIRD_PARTY_LICENSES` lists every included library with its licence.
+- CI checks dependencies for known vulnerabilities and licences.
+- Releases are built without caches from a tag that must match the source version
+  (`packaging/bump.sh`); builds are repeatable.
+- Fixed: AppImages recorded folder paths from the machine that built them.
+
+## 0.2.4
+
+Reliability fixes: settings files written atomically and read tolerantly; email settings apply
+without a restart (and **Record Bridge's certificate again**); Stop during a start cancels it;
+no freezes when closing; the background service log follows restarts; a damaged settings file is
+kept as a backup; the service starts even if Funnel can't; failed service installs say so.
+
+## 0.2.3
+
+- The browser runs in a bubblewrap box (read-only system, empty home, no desktop session).
+- Chromium's own sandbox is required.
+- The tab shows only web pages; bots may press only plain keys; every permission prompt is
+  refused, dialogs dismissed and file pickers swallowed.
+
+## 0.2.2
+
+- Fixed: part of a password could reach a bot when masking personal details ran first.
+- More disguised secrets caught (partial URL encoding, base64 at any position).
+- Blocked pages can't be reached by encoding tricks; usernames are blacked out in screenshots;
+  in-app approval buttons wait a second after each new request.
+
+## 0.2.1
+
+- Fixed: redirects could reach your LAN. Every browser connection now goes through a filtering
+  proxy that checks each host, redirect hop and WebSocket.
+- Bot names belong to the connection that first used them; connection names are unique.
+- Local tokens are refused through Funnel; opening the app no longer turns off the background
+  service's Funnel; only one copy of the app runs; Emergency stop stops the service too.
+
+## 0.2.0
+
+First AppImage release.
+
+- The browser runs hidden, shown live and masked in the Control center.
+- Personal details masked for bots unless allowed; per-bot site lists and blocked pages.
+- Approvals in the app as well as in notifications; a Settings dialog (login, tray, theme).
+- Run in the background as a sandboxed systemd user service.
+
+## 0.1.0
+
+The broker, the wizard and the security model: OAuth for Grok over Tailscale Funnel, `pbc_`
+tokens for local assistants, desktop approvals, origin-bound fills, redaction, file unlocking,
+encrypted text, home-device actions and email codes.
