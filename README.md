@@ -61,8 +61,9 @@ result is in `dist/`). It builds the last commit only (`BUILD_DIRTY=1` includes 
 changes), with a fixed Python and timestamps from that commit, so the same commit built the same
 way gives the same file. A build only runs on systems with the glibc of the machine that built
 it, so releases come from the **AppImage** GitHub Actions workflow, which builds on Ubuntu 22.04.
-Pushing a `v*` tag builds without caches, checks the tag matches the version in the source, and
-drafts the release.
+To release, set the version with `packaging/bump.sh X.Y.Z` (it updates both manifests and lock
+files; a test fails if they ever disagree), commit, and push a `vX.Y.Z` tag. The tag build runs
+without caches, checks the tag matches the version in the source, and drafts the release.
 
 ## Set up with the wizard (easiest)
 
