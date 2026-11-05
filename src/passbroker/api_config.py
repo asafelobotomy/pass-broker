@@ -22,7 +22,7 @@ def c_pair(a) -> dict[str, Any]:
 
 def c_bot_access(a) -> dict[str, Any]:
     """Set one bot's access from JSON on stdin: logins, unlock, devices, keys, email_codes,
-    personal_details, sites_limited, sites and blocked_pages."""
+    create_logins, personal_details, sites_limited, sites and blocked_pages."""
     data = json.loads(sys.stdin.readline() or "{}")
     if not isinstance(data, dict):
         raise ops.OpError("access must be a JSON object")
@@ -45,10 +45,13 @@ def _store(kind: str):
 def c_config(a) -> dict[str, Any]:
     from dataclasses import asdict as _asdict
 
+    from . import accounts
     from .mailcode import MailSettings
 
     mail = MailSettings.load(ops.dirs()[0] / "mail.json")
-    return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail)}
+    made = [{"bot": b["name"], **c} for b in ops.bots_store().list() for c in b.get("created", [])]
+    return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
+            "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True)}}
 
 
 def c_config_add(a) -> dict[str, Any]:
@@ -87,7 +90,33 @@ def c_mail_set(a) -> dict[str, Any]:
         raise ops.OpError(str(e)) from None
 
 
+def c_accounts_setup(a) -> dict[str, Any]:
+    """Make the Bot Accounts vault and give the broker's agent editor access there (as you)."""
+    from . import accounts
+
+    try:
+        return accounts.setup(a.vault, a.agent, a.main_vault, a.pass_cli)
+    finally:
+        if not a.stay_signed_in and ops.session_kind(a.pass_cli)[0] == "user":
+            ops.logout(a.pass_cli)
+
+
+def c_accounts_off(a) -> dict[str, Any]:
+    """Stop bots making accounts. The vault, its logins and the agent's access stay (remove them in Proton Pass)."""
+    from dataclasses import asdict as _asdict
+
+    from . import accounts, jsonfile
+
+    s = accounts.load()
+    s.enabled = False
+    jsonfile.write(accounts.settings_path(), _asdict(s))
+    return _asdict(s)
+
+
 def add_parsers(add) -> None:
+    add("accounts-setup", c_accounts_setup, (("--vault",), {"default": "Bot Accounts"}), (("--agent",), {"default": "passbroker"}),
+        (("--main-vault",), {"default": "Agent"}), (("--stay-signed-in",), {"action": "store_true"}))
+    add("accounts-off", c_accounts_off)
     add("pair", c_pair, (("--close",), {"action": "store_true"}))
     add("bot-access", c_bot_access, (("name",), {}))
     add("config", c_config)

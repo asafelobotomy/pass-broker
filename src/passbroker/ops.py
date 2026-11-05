@@ -213,13 +213,15 @@ def check_vault(vault: str, pass_cli: str = "pass-cli") -> dict[str, Any]:
     Also returns the JSON key names (never values) pass-cli's listing used, to
     diagnose logins whose websites weren't found.
     """
+    from . import accounts
     from .redact import Redactor
     from .vault import ProtonPassBackend
 
     # Its own session: the running broker may be logging in on its session at the same moment.
     backend = ProtonPassBackend(vault, load_token, Redactor(), pass_cli=pass_cli, session_dir=broker_session_dir("pass-session-check"))
+    backend.extra_vault = lambda: (s.vault if (s := accounts.load()).enabled else None)  # bot-made accounts
     logins = [login.public() for login in backend.list_logins()]
-    return {"logins": logins, "keys": sorted(getattr(backend, "seen_keys", set()))}
+    return {"logins": logins, "keys": sorted(getattr(backend, "seen_keys", set())), "accounts_error": backend.extra_error}
 
 
 # ---- clients ----------------------------------------------------------------------

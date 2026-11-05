@@ -202,6 +202,7 @@ export component AppWindow inherits Window {
                     }
                 }
                 Switch { text: "May use email codes (read through Proton Mail Bridge)"; checked <=> Wiz.access-email; }
+                Switch { text: "May make its own accounts (saved in your " + Wiz.acc-vault + " vault)"; checked <=> Wiz.access-create; enabled: Wiz.acc-enabled || Wiz.access-create; }
                 Switch { text: "May see personal details on pages (emails, phone, card and bank numbers)"; checked <=> Wiz.access-personal; }
                 Switch { text: "May open only these sites"; checked <=> Wiz.access-sites-limited; }
                 if Wiz.access-sites-limited: LineEdit { text <=> Wiz.access-sites; placeholder-text: "e.g. amazon.co.uk, royalmail.com"; }

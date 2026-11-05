@@ -57,6 +57,25 @@ class Backend(Protocol):
     def list_logins(self) -> list[Login]: ...
     def get(self, handle: str) -> Login: ...
     def secret(self, handle: str, field: Field, reason: str) -> str: ...
+    # Bot-made accounts (accounts.py). The password is generated where it's stored, and never
+    # returned: only the new item's handle.
+    def create_login(self, vault: str, title: str, url: str, username: str, email: str, rules: PasswordRules, reason: str) -> Login: ...
+    def create_alias(self, vault: str, prefix: str, reason: str) -> str: ...
+
+
+@dataclass(frozen=True)
+class PasswordRules:
+    length: int = 20
+    symbols: bool = True
+
+    def generate(self) -> str:
+        import string
+
+        pools = [string.ascii_lowercase, string.ascii_uppercase, string.digits] + (["!#$%&*+-=?@^_~"] if self.symbols else [])
+        while True:  # one of each kind, like Proton's own generator
+            pw = "".join(secrets.choice("".join(pools)) for _ in range(self.length))
+            if all(any(c in pool for c in pw) for pool in pools):
+                return pw
 
 
 def _new_handle() -> str:
@@ -66,10 +85,10 @@ def _new_handle() -> str:
 @dataclass
 class _Index:
     by_handle: dict[str, Login] = field(default_factory=dict)
-    ref: dict[str, str] = field(default_factory=dict)  # handle -> backend item key
-    handle_for: dict[str, str] = field(default_factory=dict)  # item key -> handle
+    ref: dict[str, Any] = field(default_factory=dict)  # handle -> backend item key
+    handle_for: dict[Any, str] = field(default_factory=dict)  # item key -> handle
 
-    def put(self, key: str, make: Callable[[str], Login]) -> Login:
+    def put(self, key: Any, make: Callable[[str], Login]) -> Login:
         handle = self.handle_for.get(key) or _new_handle()
         login = make(handle)
         self.by_handle[handle] = login
@@ -88,6 +107,7 @@ class MockBackend:
     """Reads logins from a JSON list: title, urls, username, password, totp."""
 
     def __init__(self, path: Path, redactor: Redactor) -> None:
+        self._path = path
         self._items = {str(i): item for i, item in enumerate(json.loads(path.read_text()))}
         self._redactor = redactor
         self._index = _Index()
@@ -120,6 +140,15 @@ class MockBackend:
             raise VaultError(f"item has no {field}")
         self._redactor.add(value)
         return value
+
+    def create_login(self, vault: str, title: str, url: str, username: str, email: str, rules: PasswordRules, reason: str) -> Login:
+        key = str(len(self._items))
+        self._items[key] = {"title": title, "urls": [url], "username": username or email, "password": rules.generate(), "vault": vault}
+        self._redactor.add(self._items[key]["password"])
+        return next(l for l in self.list_logins() if l.title == title)
+
+    def create_alias(self, vault: str, prefix: str, reason: str) -> str:
+        return f"{prefix}.{secrets.token_hex(3)}@passmail.test"
 
 
 # Key names seen in pass-cli JSON vary between versions and are not documented,
@@ -165,6 +194,11 @@ class ProtonPassBackend:
         session_dir: Path | None = None,
     ) -> None:
         self._vault = vault
+        # A second vault the broker may also write to (bot-made accounts, see accounts.py),
+        # looked up on every listing so setting it up needs no restart.
+        self.extra_vault: Callable[[], str | None] = lambda: None
+        self.extra_error = ""
+        self.seen_keys: set[str] = set()  # JSON key names met in listings (never values), for check-vault
         # The broker keeps its own pass-cli session, so signing in as yourself
         # (or as another agent) in a terminal never replaces it, and vice versa.
         self._session_dir = session_dir
@@ -204,6 +238,8 @@ class ProtonPassBackend:
         token = self._load_token()
         self._redactor.add(token)
         proc = self._exec(["login"], {"PROTON_PASS_PERSONAL_ACCESS_TOKEN": token})
+        if proc.returncode != 0 and "already authenticated" in proc.stderr.lower():
+            return  # signed in already: the caller's own error is the real one
         if proc.returncode != 0:
             raise VaultError("pass-cli login with the access token failed: " + self._redactor.scrub(proc.stderr.strip())[:300])
 
@@ -220,7 +256,8 @@ class ProtonPassBackend:
 
     def _item_args(self, handle: str) -> list[str]:
         self._index.get(handle)
-        return ["--vault-name", self._vault, "--item-id", self._index.ref[handle]]
+        vault, key = self._index.ref[handle]
+        return ["--vault-name", vault, "--item-id", key]
 
     def _extract(self, item: Any) -> tuple[list[str], str | None, bool | None]:
         """Websites, username and whether 2FA is set, from listing or item-view JSON.
@@ -247,10 +284,22 @@ class ProtonPassBackend:
         return urls, username, has_totp
 
     def list_logins(self) -> list[Login]:
+        self.seen_keys = set()
+        logins = self._list_vault(self._vault)
+        extra = self.extra_vault()
+        self.extra_error = ""
+        if extra and extra != self._vault:
+            try:
+                logins += self._list_vault(extra)
+            except VaultError as e:  # the main vault still works without it
+                self.extra_error = str(e)
+        return logins
+
+    def _list_vault(self, vault: str) -> list[Login]:
         # Agent sessions can't use --show-secrets, so the listing carries only
         # titles and ids; each item's own view then supplies its websites.
         out = self._run(
-            ["item", "list", "--vault-name", self._vault, "--filter-type", "login", "--output", "json"],
+            ["item", "list", "--vault-name", vault, "--filter-type", "login", "--output", "json"],
             "pass-broker: list login titles and websites",
         )
         try:
@@ -258,7 +307,6 @@ class ProtonPassBackend:
         except json.JSONDecodeError:
             raise VaultError("pass-cli returned output that isn't JSON") from None
         items = data.get("items", data) if isinstance(data, dict) else data
-        self.seen_keys: set[str] = set()
         logins = []
         for item in items if isinstance(items, list) else []:
             key = item.get("id") or item.get("item_id") or item.get("itemId")
@@ -271,7 +319,7 @@ class ProtonPassBackend:
                 try:
                     view = json.loads(
                         self._run(
-                            ["item", "view", "--vault-name", self._vault, "--item-id", key, "--output", "json"],
+                            ["item", "view", "--vault-name", vault, "--item-id", key, "--output", "json"],
                             f"pass-broker: read the website and username saved for {title[:60]}",
                         )
                     )
@@ -284,7 +332,7 @@ class ProtonPassBackend:
                     has_totp = has_totp if has_totp is not None else v_totp
             logins.append(
                 self._index.put(
-                    key,
+                    (vault, key),
                     lambda h, t=title, u=tuple(dict.fromkeys(urls)), n=username, tp=has_totp: Login(h, t, u, n, tp),
                 )
             )
@@ -303,6 +351,25 @@ class ProtonPassBackend:
             raise VaultError(f"item has no {field}")
         self._redactor.add(value)
         return value
+
+
+    def create_login(self, vault: str, title: str, url: str, username: str, email: str, rules: PasswordRules, reason: str) -> Login:
+        """pass-cli generates the password and stores it; it never passes through here or argv."""
+        args = ["item", "create", "login", "--vault-name", vault, "--title", title, "--url", url,
+                f"--generate-password={rules.length},uppercase" + (",symbols" if rules.symbols else "")]  # words switch them on
+        args += (["--username", username] if username else []) + (["--email", email] if email else [])
+        self._run(args, reason)
+        made = [l for l in self._list_vault(vault) if l.title == title]
+        if len(made) != 1:
+            raise VaultError("the login was created, but it couldn't be found again; check the vault")
+        return made[0]
+
+    def create_alias(self, vault: str, prefix: str, reason: str) -> str:
+        out = self._run(["item", "alias", "create", "--vault-name", vault, "--prefix", prefix, "--output", "json"], reason)
+        m = re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", out)
+        if not m:
+            raise VaultError("Proton Pass made no email alias (the plan's alias limit may be reached)")
+        return m.group(0)
 
 
 def _totp_code(out: str) -> str | None:

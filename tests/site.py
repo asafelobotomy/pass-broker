@@ -86,6 +86,13 @@ SHOP = """<!doctype html><title>Shop</title><a id=pay href="/account/payments">P
 <button id=spa onclick="history.pushState({}, '', '/account/payments'); document.title='Payments'">Payments (app)</button>"""
 
 
+# A sign-up form: email, the bot's own field, password and confirm.
+SIGNUP = """<!doctype html><title>Create account</title><form method=post action=/signup>
+<label>Email <input name=email type=email></label><label>Name <input name=name aria-label=name></label>
+<label>Password <input name=password type=password></label><label>Again <input name=confirm type=password></label>
+<button>Create account</button></form>"""
+
+
 class Site:
     def __init__(self) -> None:
         self.posts: list[tuple[str, dict[str, list[str]]]] = []
@@ -125,6 +132,7 @@ class Site:
                     "/welcome": "<!doctype html><title>Welcome</title><h1>Welcome, alice</h1>",
                     "/account": ACCOUNT.format(port=port),
                     "/shop": SHOP,
+                    "/signup": SIGNUP,
                     "/account/payments": "<!doctype html><title>Payments</title><p>Saved cards</p>",
                     "/framed": f'<!doctype html><title>Framed</title><iframe src="http://127.0.0.1:{port}/login" width=600 height=400></iframe>',
                 }
@@ -140,6 +148,8 @@ class Site:
                 if self.path == "/session":
                     ok = form.get("password") == [PASSWORD]
                     return self._redirect("/welcome") if ok else self._html(LOGIN.format(err="<p>Wrong password</p>"))
+                if self.path == "/signup":
+                    return self._redirect("/welcome")
                 if self.path == "/step1":
                     return self._redirect("/step2")
                 if self.path == "/otp":

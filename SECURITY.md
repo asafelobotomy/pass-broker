@@ -27,7 +27,8 @@ program can read your keyring and the broker's files directly.
 
 | Layer | Stops |
 |---|---|
-| Proton Pass agent token limited to one **Agent** vault, `viewer` role, short expiry | a compromised broker reaching your real vault |
+| Proton Pass agent token limited to one **Agent** vault, `viewer` role, short expiry; if you turn on bot accounts, `editor` on their own separate vault and nowhere else | a compromised broker reaching your real vault, or changing or deleting the logins you put in the Agent vault |
+| Bot-made accounts: off until you set them up, then per bot; each needs your Allow (site, vault, username or alias shown), at most 10 a day per bot; Proton Pass generates the password (never on a command line), the login is bound to the sign-up page's host and granted only to the bot that made it | a bot filling your vault with accounts, or learning or reusing a password it had made |
 | Token stored in your system keyring, passed to `pass-cli` by environment, never argv | the token showing up in process lists or files |
 | Opaque, per-run handles | the model naming items or fields it wasn't shown |
 | Origin binding (page **and** frame must be HTTPS on a saved host) | prompt injection that fills your password on `evil.com` or in a cross-site iframe |
@@ -76,6 +77,8 @@ program can read your keyring and the broker's files directly.
   get through, and so does anything shown only as an image.
 - **The site list covers the broker's browser only.** An assistant that can browse by itself (Grok
   can) has its own way out; the list stops the broker's browser being that way.
+- **A bot can act in the accounts it makes.** It never sees their passwords, but once signed in it
+  can do anything the account can. Approve only accounts you'd want it to have.
 - **Decrypted text and returned unlock output go to the assistant** (and so to its provider) by
   design, when you approve it.
 - **Programs running as you** can answer an approval (as they could press a notification's button), read the agent token in your keyring, the broker's pass-cli

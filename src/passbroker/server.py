@@ -37,6 +37,9 @@ user without ever showing you a password, passphrase or code.
   the user sees it when approving.
 - Sign in: list_logins, open_url to the sign-in page, fill_login with the handle; then fill_totp
   for an authenticator code or fill_email_code for a code sent by email.
+- Need your own account on a site (if the user allows it)? open_url to its sign-up page,
+  create_login (a username, or email_alias=true), fill in the other fields yourself, then
+  fill_signup with the handle. Later, sign in with that handle like any other login.
 - When the task is done, call end_session to sign your browser out of everything.
 - Locked files: list_unlockers, list_locked_files, unlock_file. Encrypted text: list_keys,
   encrypt_text, decrypt_text. Home devices: list_device_actions, run_device_action.

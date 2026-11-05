@@ -1,7 +1,7 @@
 // Steps 4-5: remote access, and unlocking & devices (tabs).
 
 import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette, TabWidget, ScrollView } from "std-widgets.slint";
-import { KeysSection, DevicesSection, MailSection } from "extras.slint";
+import { KeysSection, DevicesSection, MailSection, AccountsSection } from "extras.slint";
 import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
 import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
 import { Wiz } from "../store.slint";
@@ -96,6 +96,7 @@ export component UnlockPage inherits VerticalLayout {
             Tab { title: "Encryption keys"; ScrollView { VerticalLayout { padding: 8px; KeysSection { } } } }
             Tab { title: "Home devices"; ScrollView { VerticalLayout { padding: 8px; DevicesSection { } } } }
             Tab { title: "Email codes"; ScrollView { VerticalLayout { padding: 8px; MailSection { } } } }
+            Tab { title: "Bot accounts"; ScrollView { VerticalLayout { padding: 8px; AccountsSection { } } } }
         }
         if Wiz.extras-note != "": Muted { text: Wiz.extras-note; font-size: 12px; }
     }

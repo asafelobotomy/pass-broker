@@ -326,6 +326,41 @@ files you're happy to send to xAI/Cursor.
   in the last few minutes (left unread), and fills it in pinned like a password. The bot never sees
   the code or the mail.
 
+### Bots making their own accounts
+
+A bot you allow can sign up on a site by itself, so you don't have to make every account for it:
+
+1. It opens the site's sign-up page and calls `create_login` with a username, or with
+   `email_alias` for a new hide-my-email address that forwards to you. It can ask for a password
+   length (12-64) and no symbols, for sites that refuse them.
+2. You approve on your desktop. The request names the site, the vault and the username or alias.
+3. Proton Pass makes the password and saves the login, bound to that site, as
+   `site (bot)`. The password never passes through the broker's memory or a command line until it's
+   filled. The bot gets a handle.
+4. The bot fills in the form's other fields itself, then calls `fill_signup`. The broker fills the
+   username or email and every password field (password and confirm), and submits. Approving the
+   account covers this one form for 10 minutes.
+
+The new login is granted to the bot that made it, so it can sign in later with `fill_login`, still
+with your Allow each time. If the site then emails a code, `fill_email_code` reads it (when the bot
+may use email codes), aliases included.
+
+Set it up in the wizard's **Bot accounts** tab (step 5), or with
+`passbroker api accounts-setup --vault "Bot Accounts"` while pass-cli is signed in as you. That
+creates the vault and gives the broker's agent `editor` access to **that vault only**. Your Agent
+vault stays read-only to it. Then turn on **May make its own accounts** for each bot under
+**Access…**. A bot may make at most 10 accounts a day. **Accounts bots made**, in the same tab,
+lists them.
+
+Limits:
+- The login is saved for exactly the sign-up page's host. If the site signs in on another host
+  (`accounts.example.com` vs `example.com`), add it to the login in Proton Pass.
+- The broker's browser never reaches this PC or your LAN, so this works for sites on the internet,
+  not for apps on your home server. Those can use a device action with a login you made.
+- Sites that confirm by clicking a link in an email, or that ask the bot to set up 2FA, still need
+  you.
+- Each alias counts towards your Proton plan's alias limit.
+
 ### Per-bot access and sessions
 
 - Each bot gets **its own browser session** (cookies, tab, idle sign-out), so one bot can't use a

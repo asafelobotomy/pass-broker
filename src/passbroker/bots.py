@@ -9,7 +9,7 @@ one off by name without revoking the connection every bot shares.
 Each bot also has an access list: which logins, unlock actions, devices and
 keys it may use, and whether it may use email codes. A new bot starts with
 nothing (it can only browse in its own session) until you grant it more.
-It also says whether the bot may see personal details on pages (masked by
+It also says whether the bot may make its own accounts (accounts.py), whether it may see personal details on pages (masked by
 default, see pii.py) and, optionally, the only sites it may open.
 """
 
@@ -34,7 +34,7 @@ MAX_SITES = 100
 
 def empty_access() -> dict[str, Any]:
     return {
-        "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False,
+        "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False, "create_logins": False,
         "personal_details": False, "sites_limited": False, "sites": [], "blocked_pages": [],
     }
 
@@ -159,6 +159,7 @@ class Bots:
             items = [items] if isinstance(items, str) else list(items)
             clean[kind] = sorted({str(x)[:120] for x in items if str(x).strip()})
         clean["email_codes"] = bool(access.get("email_codes", False))
+        clean["create_logins"] = bool(access.get("create_logins", False))
         clean["personal_details"] = bool(access.get("personal_details", False))
         clean["sites_limited"] = bool(access.get("sites_limited", False))
         sites, pages = _list(access.get("sites")), _list(access.get("blocked_pages"))
@@ -171,3 +172,17 @@ class Bots:
         with self._lock, self._edit() as data:
             entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
             entry["access"] = clean
+
+    def record_created(self, bot: str, title: str, site: str) -> None:
+        """A bot made a login: it may use it, and the account is listed under the bot."""
+        name = clean_bot(bot)
+        with self._lock, self._edit() as data:
+            entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
+            acc = entry.setdefault("access", empty_access())
+            acc["logins"] = sorted({*acc.get("logins", []), title})
+            entry.setdefault("created", []).append({"title": title, "site": site, "at": time.strftime("%Y-%m-%d %H:%M")})
+
+    def created_today(self, bot: str) -> int:
+        today = time.strftime("%Y-%m-%d")
+        made = self._read().get(clean_bot(bot), {}).get("created", [])
+        return sum(1 for c in made if str(c.get("at", "")).startswith(today))

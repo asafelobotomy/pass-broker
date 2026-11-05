@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from typing import Any
 
+from .accounts import AccountSettings, AccountsMixin
 from .approvals import Approver, GrantCache
 from .audit import AuditLog
 from .bots import Bots
@@ -37,7 +39,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -54,6 +56,7 @@ class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
         keys: KeyStore | None = None,
         devices: DeviceStore | None = None,
         mail: MailSettings | None = None,
+        account_settings: Callable[[], AccountSettings] | None = None,
     ) -> None:
         self.backend = backend
         self.browser = browser
@@ -69,6 +72,8 @@ class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
         self.keys = keys
         self.devices = devices
         self.mail = mail
+        self.account_settings = account_settings  # re-read on use: set up without a restart
+        self._fresh: dict[tuple[str, str], float] = {}
         if browser is not None:
             browser.page_refusal = self.page_refusal
 

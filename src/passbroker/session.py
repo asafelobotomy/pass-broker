@@ -199,7 +199,7 @@ class Session:
         if not await loc.count():
             raise BrowserError("element is gone; take a new snapshot")
         if await loc.first.evaluate(IS_SENSITIVE_JS):
-            raise BrowserError("refused: that's a password or code field; use fill_login, fill_totp or fill_email_code")
+            raise BrowserError("refused: that's a password or code field; use fill_login, fill_signup, fill_totp or fill_email_code")
         if self._redactor.contains_secret(text):
             raise BrowserError("refused: that text contains a secret the broker holds")
         self.refused = None

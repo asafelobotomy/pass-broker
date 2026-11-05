@@ -83,6 +83,7 @@ def check_test_switches(args: argparse.Namespace) -> None:
 def cmd_serve(args: argparse.Namespace) -> None:
     import uvicorn
 
+    from . import accounts
     from .approvals import DesktopApprover, GrantCache, StaticApprover
     from .audit import AuditLog
     from .bots import Bots
@@ -111,6 +112,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         backend = MockBackend(Path(args.mock), redactor)
     else:
         backend = ProtonPassBackend(args.vault, _load_token, redactor, pass_cli=args.pass_cli, session_dir=ops.broker_session_dir())
+        backend.extra_vault = lambda: (s.vault if (s := accounts.load(config / "accounts.json")).enabled else None)
     approver = StaticApprover(True) if args.insecure_auto_approve else DesktopApprover(args.approval_timeout)
     browser = Browser(
         data / "profile",
@@ -133,6 +135,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         show_usernames=args.show_usernames,
         unlockers=Unlockers(config / "unlockers.json"),
         bots=bots,
+        account_settings=lambda: accounts.load(config / "accounts.json"),
         keys=KeyStore(config / "keys.json"),
         devices=DeviceStore(config / "devices.json"),
         mail=MailSettings.load(config / "mail.json"),

@@ -190,11 +190,18 @@ export global Wiz {
     callback device-remove(string);
     callback mail-save;
     callback mail-repin;
+    // bot-made accounts (a vault of their own)
+    in property <bool> acc-enabled: false;
+    in-out property <string> acc-vault: "Bot Accounts";
+    in property <[string]> acc-created;
+    callback acc-setup;
+    callback acc-off;
 
     // bot access editor (open when access-bot != "")
     in property <string> access-bot;
     in property <[AccessItem]> access-items;
     in-out property <bool> access-email: false;
+    in-out property <bool> access-create: false;
     in-out property <bool> access-personal: false;
     in-out property <bool> access-sites-limited: false;
     in-out property <string> access-sites;

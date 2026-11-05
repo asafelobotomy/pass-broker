@@ -90,6 +90,7 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
         let (a, w) = (app.clone(), ui.as_weak());
         move || { if let Some(ui) = w.upgrade() { save_mail(&a, &ui, true); } }
     });
+    wire_accounts(app, ui);
 }
 
 fn save(app: &Shared, ui: &AppWindow, kind: &'static str, body: String, clear: fn(&AppWindow)) {
@@ -124,6 +125,54 @@ pub fn refresh(app: &Shared, ui: &AppWindow) {
         g.set_mail_host(s(&v["mail"]["host"]).into());
         g.set_mail_port(v["mail"]["port"].as_i64().unwrap_or(1143) as i32);
         g.set_mail_age(v["mail"]["max_age_minutes"].as_i64().unwrap_or(10) as i32);
+        let acc = &v["accounts"];
+        g.set_acc_enabled(acc["enabled"].as_bool().unwrap_or(false));
+        if !s(&acc["vault"]).is_empty() {
+            g.set_acc_vault(s(&acc["vault"]).into());
+        }
+        let made: Vec<slint::SharedString> = acc["created"].as_array().into_iter().flatten()
+            .map(|c| format!("{}  ·  {}  ·  by {}  ·  {}", s(&c["title"]), s(&c["site"]), s(&c["bot"]), s(&c["at"])).into())
+            .collect();
+        g.set_acc_created(ModelRc::new(VecModel::from(made)));
+    });
+}
+
+/// Bot accounts: make the vault and give the broker's agent editor access there, or turn it off.
+fn wire_accounts(app: &Shared, ui: &AppWindow) {
+    wiz(ui).on_acc_setup({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || {
+            let Some(ui) = w.upgrade() else { return };
+            let (agent, main) = {
+                let st = a.state.lock().unwrap();
+                (st.settings.token_name.clone(), st.settings.vault.clone())
+            };
+            let cmd = vec!["accounts-setup".to_string(), "--vault".into(), wiz(&ui).get_acc_vault().trim().to_string(),
+                           "--agent".into(), agent, "--main-vault".into(), main];
+            bg(&a, &ui, "Setting up bot accounts…", move |app| app.cli.call(&cmd, None), |ui, app, r| {
+                let note = match r {
+                    Ok(v) => format!("Bot accounts are on, in the {} vault. Allow them per bot in Access….", s(&v["vault"])),
+                    Err(e) => e,
+                };
+                wiz(ui).set_login_state("".into());
+                wiz(ui).set_extras_note(note.into());
+                refresh(app, ui);
+            });
+        }
+    });
+    wiz(ui).on_acc_off({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || {
+            let Some(ui) = w.upgrade() else { return };
+            bg(&a, &ui, "Turning off…", |app| app.cli.call(&args(["accounts-off"]), None), |ui, app, r| {
+                let note = match r {
+                    Ok(_) => "Bot accounts are off. The vault and its logins stay in Proton Pass.".to_string(),
+                    Err(e) => e,
+                };
+                wiz(ui).set_extras_note(note.into());
+                refresh(app, ui);
+            });
+        }
     });
 }
 
