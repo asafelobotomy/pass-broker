@@ -18,9 +18,30 @@ pytestmark = pytest.mark.skipif(not shutil.which("openssl"), reason="openssl not
 
 def _self_signed(folder, name, expired=False):
     key, cert = folder / f"{name}.key", folder / f"{name}.pem"
-    dates = ["-not_before", "20200101000000Z", "-not_after", "20200102000000Z"] if expired else ["-days", "2"]
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", *dates, "-subj", f"/CN={name}",
+    if expired:
+        return _expired(key, cert, name)
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", f"/CN={name}",
                     "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
+    return key, cert
+
+
+def _expired(key, cert, name):
+    """A certificate that expired in 2020 (older openssl `req` can't backdate one)."""
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    k = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+    start = datetime.datetime(2020, 1, 1, tzinfo=datetime.UTC)
+    c = (x509.CertificateBuilder().subject_name(subject).issuer_name(subject).public_key(k.public_key())
+         .serial_number(x509.random_serial_number()).not_valid_before(start).not_valid_after(start + datetime.timedelta(days=1))
+         .sign(k, hashes.SHA256()))
+    key.write_bytes(k.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
+    cert.write_bytes(c.public_bytes(serialization.Encoding.PEM))
     return key, cert
 
 
