@@ -23,7 +23,11 @@ fn set_autostart(prefs: &AppPrefs) -> Result<(), String> {
             _ => Ok(()),
         };
     }
-    let exe = std::env::current_exe().map_err(|e| format!("couldn't find this program: {e}"))?;
+    // From an AppImage, the AppImage file: the folder it's mounted on changes every run.
+    let exe = match std::env::var_os("APPIMAGE").map(PathBuf::from).filter(|p| p.is_file()) {
+        Some(appimage) => appimage,
+        None => std::env::current_exe().map_err(|e| format!("couldn't find this program: {e}"))?,
+    };
     let exe = exe.to_string_lossy();
     if exe.contains(['"', '\\', '`', '$', '\n']) {
         return Err("this program's path has characters an autostart entry can't hold".into());

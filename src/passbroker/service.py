@@ -36,6 +36,19 @@ def unit_path() -> Path:
     return base / "systemd" / "user" / UNIT
 
 
+def _appimage() -> str | None:
+    """The AppImage file we're running from, if any (the runtime sets $APPIMAGE)."""
+    path = os.environ.get("APPIMAGE")
+    return path if path and os.path.isfile(path) else None
+
+
+def launcher() -> list[str]:
+    """How the service starts the broker. From an AppImage, the AppImage file itself: the
+    folder it's mounted on now is gone by the next login."""
+    appimage = _appimage()
+    return [appimage, "passbroker"] if appimage else [sys.executable, "-I", "-m", "passbroker.cli"]
+
+
 def _environment() -> str:
     """Pass on custom XDG folders, so the service uses the same config, data and state as the wizard."""
     lines = []
@@ -45,6 +58,9 @@ def _environment() -> str:
             if any(c in value for c in '"\\\n%$'):
                 raise ValueError(f"{key} contains characters a unit file can't hold")
             lines.append(f'Environment="{key}={value}"\n')
+    if _appimage():
+        # The sandbox forbids the setuid FUSE mount; unpack into the service's private /tmp instead.
+        lines.append('Environment="APPIMAGE_EXTRACT_AND_RUN=1"\n')
     return "".join(lines)
 
 
@@ -67,7 +83,7 @@ def render(serve_args: list[str], config: Path, data: Path, state: Path, port: i
     """The unit file text. `serve_args` are the options after `passbroker serve`."""
     if any(a in serve_args for a in ("--mock", "--insecure-auto-approve", "--allow-http-localhost", "--no-pairing-window", "--notify-file")):
         raise ValueError("test-only switches can't go into a service")
-    exec_start = shlex.join([sys.executable, "-m", "passbroker.cli", "serve", *serve_args])
+    exec_start = shlex.join([*launcher(), "serve", *serve_args])
     tailscale = shutil.which("tailscale") or "/usr/bin/tailscale"
     # "-": a folder missing inside the sandbox (one under /tmp, which PrivateTmp replaces) is
     # skipped instead of stopping the service from starting at all.

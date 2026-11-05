@@ -36,6 +36,26 @@ the threat model, what protects what, what it can't stop, and how to report a vu
   `keepassxc-cli` (file unlocking), Proton Mail Bridge (email codes), `ssh` (device actions),
   systemd (background service).
 
+## AppImage
+
+One file with the wizard, the broker and a private Python, for any desktop Linux with
+glibc 2.35 or newer (Ubuntu 22.04, Debian 13, Fedora 36 and later):
+
+```bash
+chmod +x Pass_Broker-x86_64.AppImage
+./Pass_Broker-x86_64.AppImage
+```
+
+It doesn't include Chromium (the Requirements step downloads it on first run) or the Proton
+Pass CLI, Tailscale, gpg, openssl and 7z, which the Requirements step checks for. The broker's
+command line is inside too: `./Pass_Broker-x86_64.AppImage passbroker --help`. The background
+service and **Open Pass Broker when I log in** point at the AppImage file itself, so keep it
+where it is (or turn them off and on again after moving it).
+
+Build it with `packaging/appimage/build.sh` (needs cargo, uv and squashfs-tools; the result is
+in `dist/`). A build only runs on systems with the glibc of the machine that built it, so
+releases come from the **AppImage** GitHub Actions workflow, which builds on Ubuntu 22.04.
+
 ## Set up with the wizard (easiest)
 
 ```bash

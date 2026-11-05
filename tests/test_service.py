@@ -49,3 +49,16 @@ def test_unit_carries_custom_folders_and_installs_where_systemd_looks(tmp_path, 
     monkeypatch.setenv("XDG_STATE_HOME", '/tmp/bad"quote')
     with pytest.raises(ValueError):
         service.render(["--port", "8787"], config, data, state, 8787, funnel=False)
+
+
+def test_service_from_an_appimage_starts_the_appimage_file(tmp_path, monkeypatch):
+    config, data, state = (tmp_path / n for n in ("config", "data", "state"))
+    config.mkdir()
+    appimage = tmp_path / "Pass_Broker-x86_64.AppImage"
+    appimage.write_bytes(b"")
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+    text = service.render(["--port", "8787"], config, data, state, 8787, funnel=False)
+    assert f"ExecStart={appimage} passbroker serve --port 8787" in text
+    assert 'Environment="APPIMAGE_EXTRACT_AND_RUN=1"' in text
+    monkeypatch.delenv("APPIMAGE")
+    assert " -I -m passbroker.cli serve" in service.render(["--port", "8787"], config, data, state, 8787, funnel=False)

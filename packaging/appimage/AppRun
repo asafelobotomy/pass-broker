@@ -1,0 +1,14 @@
+#!/bin/sh
+# Pass Broker AppImage entry point.
+#   Pass_Broker.AppImage                 the setup wizard and control center
+#   Pass_Broker.AppImage passbroker ...  the broker's command line (the service runs this)
+set -eu
+HERE="$(dirname "$(readlink -f "$0")")"
+# The wizard runs the broker through this; -I ignores PYTHONPATH and user site-packages,
+# so nothing outside the AppImage can slip code into the process that handles secrets.
+export PASSBROKER_CLI="$HERE/usr/bin/passbroker"
+if [ "${1:-}" = "passbroker" ]; then
+    shift
+    exec "$HERE/usr/python/bin/python3" -I -m passbroker.cli "$@"
+fi
+exec "$HERE/usr/bin/passbroker-wizard" "$@"

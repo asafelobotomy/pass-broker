@@ -306,7 +306,7 @@ def browser_installed() -> bool:
 
 
 def install_browser_command() -> list[str]:
-    return [sys.executable, "-m", "playwright", "install", "chromium"]
+    return [sys.executable, "-I", "-m", "playwright", "install", "chromium"]
 
 
 def environment_checks(pass_cli: str = "pass-cli", browser_check: Callable[[], bool] = browser_installed) -> list[Check]:
@@ -341,7 +341,7 @@ def serve_command(
     keep_sessions: bool = False,
     idle_minutes: float = 15,
 ) -> list[str]:
-    cmd = [sys.executable, "-m", "passbroker.cli", "serve", "--port", str(port), "--vault", vault, "--grant-minutes", str(grant_minutes), "--pass-cli", pass_cli]
+    cmd = [sys.executable, "-I", "-m", "passbroker.cli", "serve", "--port", str(port), "--vault", vault, "--grant-minutes", str(grant_minutes), "--pass-cli", pass_cli]
     cmd += ["--keep-sessions"] if keep_sessions else ["--idle-minutes", str(idle_minutes)]
     if public_hosts and any(h.endswith(".ts.net") for h in public_hosts):
         cmd.append("--manage-funnel")

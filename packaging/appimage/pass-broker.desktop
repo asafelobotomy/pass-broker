@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Pass Broker
+GenericName=AI sign-in broker
+Comment=Let AI assistants use Proton Pass sign-ins without seeing your secrets
+Exec=passbroker-wizard
+Icon=pass-broker
+Terminal=false
+Categories=Utility;Security;
+Keywords=proton;pass;password;mcp;grok;
+StartupWMClass=passbroker-wizard
