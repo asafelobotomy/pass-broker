@@ -12,7 +12,6 @@ agent cache or config take part; the passphrase goes in on a separate pipe.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -20,6 +19,8 @@ import subprocess
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from . import jsonfile
 
 MAX_TEXT = 1_000_000
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
@@ -42,19 +43,11 @@ class KeyStore:
         self.path = path
 
     def load(self) -> list[Key]:
-        try:
-            data = json.loads(self.path.read_text() or "{}")
-        except FileNotFoundError:
-            return []
-        return [Key(**k) for k in data.get("keys", [])]
+        data = jsonfile.read(self.path, {})
+        return [jsonfile.build(Key, k) for k in data.get("keys", [])]
 
     def _save(self, keys: list[Key]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump({"keys": [asdict(k) for k in keys]}, f, indent=2)
-        os.replace(tmp, self.path)
+        jsonfile.write(self.path, {"keys": [asdict(k) for k in keys]})
 
     def add(self, key: Key) -> None:
         if not (isinstance(key.name, str) and NAME_RE.fullmatch(key.name)):

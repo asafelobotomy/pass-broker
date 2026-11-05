@@ -13,8 +13,6 @@ import email
 import html
 import imaplib
 import ipaddress
-import json
-import os
 import re
 import ssl
 import time
@@ -24,6 +22,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import jsonfile
 from .origin import host_of
 
 if TYPE_CHECKING:
@@ -52,10 +51,7 @@ class MailSettings:
 
     @staticmethod
     def load(path: Path) -> "MailSettings":
-        try:
-            return MailSettings(**json.loads(path.read_text() or "{}"))
-        except FileNotFoundError:
-            return MailSettings()
+        return jsonfile.build(MailSettings, jsonfile.read(path, {}))
 
     def save(self, path: Path) -> str:
         """Save, pinning Bridge's self-signed certificate on first save. Returns its fingerprint."""
@@ -68,10 +64,7 @@ class MailSettings:
                 self.cert_pem = fetch_imap_starttls_cert(self.host, self.port)
             except OSError as e:
                 raise ValueError(f"couldn't reach Proton Mail Bridge to record its certificate ({type(e).__name__}); start Bridge and save again") from None
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump(asdict(self), f, indent=2)
+        jsonfile.write(path, asdict(self))
         return fingerprint(self.cert_pem) if self.cert_pem else ""
 
 
@@ -156,12 +149,16 @@ def fetch_code(settings: MailSettings, user: str, password: str, domains: set[st
 
 class MailMixin:
     mail_fetch: Callable[..., str | None] = staticmethod(fetch_code)
+    mail_path: Path | None = None  # where the settings live, re-read on every use
 
     async def fill_email_code(self: "Broker", client: str, handle: str, reason: str = "") -> dict[str, Any]:
         import asyncio
 
         from .broker import BrokerError
 
+        if self.mail_path is not None:
+            # Read now, not at startup: settings saved while the broker runs apply at once.
+            self.mail = MailSettings.load(self.mail_path)
         if self.mail is None or not self.mail.item:
             raise BrokerError("email codes aren't set up; ask the user to add Proton Mail Bridge in Pass Broker")
         self._permit(client, "email_codes")
@@ -175,7 +172,8 @@ class MailMixin:
             try:
                 code = await asyncio.to_thread(self.mail_fetch, self.mail, user, password, domains)
             except ssl.SSLError as e:
-                raise BrokerError(str(e) if "pinned" in str(e) else "Bridge's certificate changed or couldn't be checked; save the email-code settings again") from None
+                raise BrokerError(str(e) if "pinned" in str(e) else "Bridge's certificate changed or couldn't be checked; if Bridge was reinstalled, ask the user to press "
+                                  "Record Bridge's certificate again under Email codes in Pass Broker") from None
             except (OSError, imaplib.IMAP4.error) as e:
                 raise BrokerError(f"couldn't read mail through Proton Mail Bridge ({type(e).__name__}); is Bridge running?") from None
             finally:

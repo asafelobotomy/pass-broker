@@ -24,6 +24,7 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
         crate::svc_mode::start(app, ui);
         return;
     }
+    app.start_cancelled.store(false, Ordering::SeqCst);
     wiz(ui).set_broker_state("starting".into());
     wiz(ui).set_log_lines(strings(std::iter::empty()));
     wiz(ui).set_probe_result("".into());
@@ -63,20 +64,23 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
             Err(e) => {
                 wiz(ui).set_broker_state("stopped".into());
                 toast(ui, format!("Couldn't start: {e}"), true);
-                if app.funnel_on.swap(false, Ordering::SeqCst) { let _ = app.cli.call(&args(["funnel-stop"]), None); }
+                funnel_off_in_background(app);
                 return;
             }
         };
+        // Stop (or Emergency stop) was pressed while Funnel and the command were being set up.
+        if app.start_cancelled.load(Ordering::SeqCst) {
+            wiz(ui).set_broker_state("stopped".into());
+            funnel_off_in_background(app);
+            return;
+        }
         let mut child = match app.cli.spawn(&argv) {
             Ok(c) => c,
             Err(e) => {
                 wiz(ui).set_broker_state("stopped".into());
                 toast(ui, format!("Couldn't start the broker: {e}"), true);
                 // Funnel was turned on for it; don't leave the port public with nothing behind it.
-                if app.funnel_on.swap(false, Ordering::SeqCst) {
-                    let cli = app.cli.clone();
-                    std::thread::spawn(move || { let _ = cli.call(&args(["funnel-stop"]), None); });
-                }
+                funnel_off_in_background(app);
                 return;
             }
         };
@@ -127,7 +131,16 @@ pub fn start_broker(app: &Shared, ui: &AppWindow) {
     });
 }
 
+/// Turn Funnel off if this window turned it on, without holding up the UI.
+fn funnel_off_in_background(app: &Shared) {
+    if app.funnel_on.swap(false, Ordering::SeqCst) {
+        let cli = app.cli.clone();
+        std::thread::spawn(move || { let _ = cli.call(&args(["funnel-stop"]), None); });
+    }
+}
+
 pub fn stop_broker_blocking_app(app: &App) {
+    app.start_cancelled.store(true, Ordering::SeqCst);
     let child = app.broker.lock().unwrap().take();
     if let Some(mut c) = child {
         unsafe { libc::kill(c.id() as i32, libc::SIGTERM); }

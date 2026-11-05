@@ -80,6 +80,12 @@ export component MailSection inherits VerticalLayout {
     Muted { text: "A vault item with your Bridge username and the password Bridge shows under its account settings (not your Proton password)."; font-size: 12px; }
     Field { label: "Bridge IMAP"; HorizontalLayout { spacing: 8px; LineEdit { text <=> Wiz.mail-host; enabled: !Wiz.locked; } SpinBox { minimum: 1; maximum: 65535; value <=> Wiz.mail-port; enabled: !Wiz.locked; } } }
     Field { label: "Codes newer than (min)"; SpinBox { minimum: 1; maximum: 60; value <=> Wiz.mail-age; enabled: !Wiz.locked; } }
-    if !Wiz.locked: HorizontalLayout { alignment: start; Button { text: "Save email-code settings"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.mail-save(); } } }
+    if !Wiz.locked: HorizontalLayout {
+        alignment: start;
+        spacing: 10px;
+        Button { text: "Save email-code settings"; primary: true; enabled: !Wiz.busy; clicked => { Wiz.mail-save(); } }
+        Button { text: "Record Bridge's certificate again"; enabled: !Wiz.busy; clicked => { Wiz.mail-repin(); } }
+    }
+    if !Wiz.locked: Muted { text: "Only after reinstalling Bridge, and only on a network you trust: it replaces the certificate recorded the first time."; font-size: 12px; wrap: word-wrap; }
     Rectangle { vertical-stretch: 1; }
 }

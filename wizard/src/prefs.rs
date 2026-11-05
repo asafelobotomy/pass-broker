@@ -32,6 +32,7 @@ fn set_autostart(prefs: &AppPrefs) -> Result<(), String> {
     if exe.contains(['"', '\\', '`', '$', '\n']) {
         return Err("this program's path has characters an autostart entry can't hold".into());
     }
+    let exe = exe.replace('%', "%%"); // % starts a field code (%f, %u...) in desktop entries
     // In the tray at login rather than a window popping up, when there is a tray.
     let args = if prefs.tray { " --minimized" } else { "" };
     let entry = format!(
@@ -85,7 +86,9 @@ pub fn wire(app: &Shared, ui: &AppWindow) {
             {
                 let mut st = a.state.lock().unwrap();
                 st.prefs = prefs;
-                st.save();
+                if let Err(e) = st.try_save() {
+                    problems.push(format!("couldn't save the settings ({e})"));
+                }
             }
             if problems.is_empty() {
                 g.set_settings_open(false);

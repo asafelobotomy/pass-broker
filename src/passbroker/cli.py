@@ -137,6 +137,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
         devices=DeviceStore(config / "devices.json"),
         mail=MailSettings.load(config / "mail.json"),
     )
+    broker.mail_path = config / "mail.json"
     preview = Preview(browser, redactor, preview_dir())
     browser.on_signed_out = lambda key, reason: broker.audit.record("signed_out", client=key, reason=reason)
     clients_path = config / "clients.json"

@@ -233,7 +233,10 @@ def c_funnel_start(a) -> None:
 
 def c_funnel_stop(a) -> dict[str, Any]:
     cmd = ops.funnel_stop_command()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        raise ops.OpError("turning Funnel off timed out; is tailscaled running?") from None
     if proc.returncode != 0:
         raise ops.OpError("turning Funnel off failed: " + (proc.stderr.strip() or proc.stdout.strip())[:200])
     return {}

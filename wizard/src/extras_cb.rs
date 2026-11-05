@@ -67,15 +67,13 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
         };
         if kind == "keys" { wiz(ui).on_key_remove(remove) } else { wiz(ui).on_device_remove(remove) }
     }
-    wiz(ui).on_mail_save({
-        let (a, w) = (app.clone(), ui.as_weak());
-        move || {
-            let Some(ui) = w.upgrade() else { return };
-            let g = wiz(&ui);
+    let save_mail = |a: &Shared, ui: &AppWindow, repin: bool| {
+            let g = wiz(ui);
             let items = a.state.lock().unwrap().unlock_item_titles.clone();
             let item = if g.get_mail_item() > 0 { items.get(g.get_mail_item() as usize - 1).cloned().unwrap_or_default() } else { String::new() };
-            let body = json!({"item": item, "host": g.get_mail_host().trim(), "port": g.get_mail_port(), "max_age_minutes": g.get_mail_age()}).to_string();
-            bg(&a, &ui, "Saving (and recording Bridge's certificate)…", move |app| app.cli.call(&args(["mail-set"]), Some(&body)), |ui, app, r| {
+            // repin: record Bridge's certificate afresh (after Bridge was reinstalled); otherwise the first one is kept.
+            let body = json!({"item": item, "host": g.get_mail_host().trim(), "port": g.get_mail_port(), "max_age_minutes": g.get_mail_age(), "repin": repin}).to_string();
+            bg(a, ui, "Saving (and recording Bridge's certificate)…", move |app| app.cli.call(&args(["mail-set"]), Some(&body)), |ui, app, r| {
                 wiz(ui).set_extras_note(match r {
                     Ok(v) if !s(&v["pinned"]).is_empty() => format!("Saved. Bridge's certificate is pinned (SHA-256 {}).", s(&v["pinned"])).into(),
                     Ok(_) => "Email-code settings saved.".into(),
@@ -83,7 +81,14 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
                 });
                 refresh(app, ui);
             });
-        }
+    };
+    wiz(ui).on_mail_save({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || { if let Some(ui) = w.upgrade() { save_mail(&a, &ui, false); } }
+    });
+    wiz(ui).on_mail_repin({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || { if let Some(ui) = w.upgrade() { save_mail(&a, &ui, true); } }
     });
 }
 

@@ -89,14 +89,16 @@ def render(serve_args: list[str], config: Path, data: Path, state: Path, port: i
     # skipped instead of stopping the service from starting at all.
     rw = " ".join(shlex.quote(f"-{d}") for d in _writable_dirs(config, data, state))
     funnel_lines = (
-        f"ExecStartPre={shlex.join([tailscale, 'funnel', '--bg', '--https=443', f'http://127.0.0.1:{port}'])}\n"
+        # "-": if Funnel can't start (the tailnet may not be up yet at login), the broker still
+        # starts for local assistants rather than not at all; the log shows why Funnel failed.
+        f"ExecStartPre=-{shlex.join([tailscale, 'funnel', '--bg', '--https=443', f'http://127.0.0.1:{port}'])}\n"
         f"ExecStopPost=-{shlex.join([tailscale, 'funnel', '--https=443', 'off'])}\n"
         if funnel else ""
     )
     return f"""# Written by `passbroker service install`; reinstall rather than editing by hand.
 [Unit]
 Description=Pass Broker (AI assistants use Proton Pass secrets without seeing them)
-After=graphical-session.target network-online.target
+After=graphical-session.target
 
 [Service]
 Type=simple
@@ -139,14 +141,19 @@ def install(serve_args: list[str], config: Path, data: Path, state: Path, port: 
     tmp = path.with_suffix(".tmp")
     tmp.write_text(render(serve_args, config, data, state, port, funnel))
     os.replace(tmp, path)
-    _systemctl("daemon-reload")
+    _check(_systemctl("daemon-reload"), "reload systemd")
     if enable:
-        _systemctl("enable", UNIT)
+        _check(_systemctl("enable", UNIT), "enable the service")
     return path
 
 
+def _check(proc: subprocess.CompletedProcess[str], what: str) -> None:
+    if proc.returncode != 0:
+        raise RuntimeError(f"couldn't {what}: " + ((proc.stderr or proc.stdout).strip()[-300:] or f"systemctl exit {proc.returncode}"))
+
+
 def uninstall() -> None:
-    _systemctl("disable", "--now", UNIT)
+    _systemctl("disable", "--now", UNIT)  # fine if it was never installed
     unit_path().unlink(missing_ok=True)
     _systemctl("daemon-reload")
 

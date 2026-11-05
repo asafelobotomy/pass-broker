@@ -14,7 +14,6 @@ says so.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -23,6 +22,8 @@ import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import jsonfile
 
 MAX_OUTPUT = 20_000
 MAX_EXTRACT = 2 * 1024**3  # refuse archives that unpack to more than this
@@ -120,19 +121,11 @@ class Unlockers:
         self.path = path
 
     def load(self) -> list[Action]:
-        try:
-            data = json.loads(self.path.read_text() or "{}")
-        except FileNotFoundError:
-            return []
-        return [Action(**a) for a in data.get("actions", [])]
+        data = jsonfile.read(self.path, {})
+        return [jsonfile.build(Action, a) for a in data.get("actions", [])]
 
     def save(self, actions: list[Action]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump({"actions": [asdict(a) for a in actions]}, f, indent=2)
-        os.replace(tmp, self.path)
+        jsonfile.write(self.path, {"actions": [asdict(a) for a in actions]})
 
     def add(self, action: Action) -> None:
         validate(action)

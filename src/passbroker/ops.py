@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from . import confine
+from . import confine, jsonfile
 from .tailscale import (  # noqa: F401  (re-exported for api and tests)
     FUNNEL_OPERATOR_FIX,
     TailscaleState,
@@ -191,8 +191,8 @@ def create_agent_token(name: str, expiration: str, vault: str, pass_cli: str = "
     return backend
 
 
-def broker_session_dir() -> Path:
-    return dirs()[1] / "pass-session"
+def broker_session_dir(name: str = "pass-session") -> Path:
+    return dirs()[1] / name
 
 
 def session_kind(pass_cli: str = "pass-cli") -> tuple[str, str]:
@@ -216,7 +216,8 @@ def check_vault(vault: str, pass_cli: str = "pass-cli") -> dict[str, Any]:
     from .redact import Redactor
     from .vault import ProtonPassBackend
 
-    backend = ProtonPassBackend(vault, load_token, Redactor(), pass_cli=pass_cli, session_dir=broker_session_dir())
+    # Its own session: the running broker may be logging in on its session at the same moment.
+    backend = ProtonPassBackend(vault, load_token, Redactor(), pass_cli=pass_cli, session_dir=broker_session_dir("pass-session-check"))
     logins = [login.public() for login in backend.list_logins()]
     return {"logins": logins, "keys": sorted(getattr(backend, "seen_keys", set()))}
 
@@ -235,9 +236,8 @@ def list_clients() -> list[str]:
 
 
 def _write_clients(clients: dict[str, str]) -> None:
-    fd = os.open(clients_path(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as f:
-        json.dump(clients, f, indent=2)
+    # Atomic: the running broker reads this on every request.
+    jsonfile.write(clients_path(), clients)
 
 
 def add_client(name: str) -> str:

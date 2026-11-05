@@ -139,10 +139,13 @@ export component BotLine inherits HorizontalLayout {
     callback access(string);
     spacing: 12px;
     height: 44px;
-    Switch {
+    sw := Switch {
         checked: root.bot.enabled;
-        toggled => { root.toggle(root.bot.name, self.checked); }
+        // Show the saved state until the broker confirms the change (so a refused switch doesn't
+        // stay flipped); the new state arrives with the next refresh.
+        toggled => { root.toggle(root.bot.name, self.checked); self.checked = root.bot.enabled; }
     }
+    changed bot => { sw.checked = root.bot.enabled; }
     VerticalLayout {
         alignment: center;
         horizontal-stretch: 1;

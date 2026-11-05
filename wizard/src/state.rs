@@ -108,8 +108,9 @@ impl WizardState {
     pub fn load() -> Self {
         let p = path();
         let text = fs::read_to_string(&p).unwrap_or_default();
-        if !text.trim().is_empty() && serde_json::from_str::<serde_json::Value>(&text).is_err() {
-            // Keep a damaged file for inspection rather than silently starting over on top of it.
+        // Keep a damaged file (or one with a value of the wrong type, which would otherwise load as
+        // an empty setup) for inspection, rather than silently starting over on top of it.
+        if !text.trim().is_empty() && serde_json::from_str::<WizardState>(&text).is_err() {
             let _ = fs::rename(&p, p.with_extension(format!("corrupt-{}", now().replace([' ', ':'], "-"))));
         }
         Self::parse(&text)
@@ -128,7 +129,14 @@ impl WizardState {
         s
     }
 
+    /// Save, reporting a failure on stderr (callers that tell the user use `try_save`).
     pub fn save(&self) {
+        if let Err(e) = self.try_save() {
+            eprintln!("couldn't save the wizard's settings: {e}");
+        }
+    }
+
+    pub fn try_save(&self) -> Result<(), String> {
         let p = path();
         if let Some(dir) = p.parent() {
             use std::os::unix::fs::DirBuilderExt;
@@ -142,9 +150,7 @@ impl WizardState {
             .mode(0o600)
             .open(&tmp)
             .and_then(|mut f| f.write_all(serde_json::to_string_pretty(self).unwrap_or_default().as_bytes()));
-        if ok.is_ok() {
-            let _ = fs::rename(&tmp, &p);
-        }
+        ok.and_then(|_| fs::rename(&tmp, &p)).map_err(|e| format!("{}: {e}", p.display()))
     }
 
     /// 0 = not reachable yet, 1 = to do, 2 = done and locked, 3 = unlocked for editing.

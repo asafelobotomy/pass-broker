@@ -154,7 +154,10 @@ class Bots:
         name = clean_bot(bot)
         clean = empty_access()
         for kind in KINDS:
-            clean[kind] = sorted({str(x)[:120] for x in access.get(kind, []) if str(x).strip()})
+            # A lone string is one name, not a list of letters.
+            items = access.get(kind) or []
+            items = [items] if isinstance(items, str) else list(items)
+            clean[kind] = sorted({str(x)[:120] for x in items if str(x).strip()})
         clean["email_codes"] = bool(access.get("email_codes", False))
         clean["personal_details"] = bool(access.get("personal_details", False))
         clean["sites_limited"] = bool(access.get("sites_limited", False))

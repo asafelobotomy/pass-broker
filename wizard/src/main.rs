@@ -44,6 +44,8 @@ pub struct App {
     pub state: Mutex<WizardState>,
     pub broker: Mutex<Option<Child>>,
     pub funnel_on: AtomicBool,
+    /// Set by any stop: a start still in progress must not go on to launch the broker.
+    pub start_cancelled: AtomicBool,
     pub clipboard: Mutex<Option<arboard::Clipboard>>,
     pub busy: AtomicUsize,
     // last known facts from `api status`
@@ -71,6 +73,7 @@ fn main() -> Result<(), slint::PlatformError> {
         state: Mutex::new(WizardState::load()),
         broker: Mutex::new(None),
         funnel_on: AtomicBool::new(false),
+        start_cancelled: AtomicBool::new(false),
         clipboard: Mutex::new(arboard::Clipboard::new().ok()),
         busy: AtomicUsize::new(0),
         requirements_ok: AtomicBool::new(false),
@@ -166,8 +169,12 @@ fn main() -> Result<(), slint::PlatformError> {
         move || {
             // With the tray icon, closing only hides the window; the broker keeps running.
             if !prefs::close_to_tray(&app) {
-                broker_proc::stop_broker_blocking_app(&app);
-                let _ = slint::quit_event_loop();
+                // The window goes at once; the broker (up to 10 s to stop cleanly) stops behind it.
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    broker_proc::stop_broker_blocking_app(&app);
+                    let _ = slint::invoke_from_event_loop(|| { let _ = slint::quit_event_loop(); });
+                });
             }
             slint::CloseRequestResponse::HideWindow
         }
@@ -178,6 +185,7 @@ fn main() -> Result<(), slint::PlatformError> {
     let r = slint::run_event_loop_until_quit();
     tray::stop();
     broker_proc::stop_broker_blocking_app(&app);
+    svc_mode::stop_following(&app);
     r
 }
 

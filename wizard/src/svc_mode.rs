@@ -11,7 +11,8 @@ use slint::{ComponentHandle, Model, SharedString, VecModel};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::rc::Rc;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 const MAX_LOG_LINES: usize = 400;
 
@@ -109,13 +110,21 @@ pub fn stop(app: &Shared, ui: &AppWindow) {
 }
 
 /// Ask systemd for the service's state and reflect it in the wizard.
+/// One status check at a time (a hung `systemctl` mustn't pile up threads), and the last state
+/// seen, so "failed" is announced once rather than every few seconds.
+static POLLING: AtomicBool = AtomicBool::new(false);
+static FOLLOWING: AtomicBool = AtomicBool::new(false);
+static LAST_STATE: Mutex<String> = Mutex::new(String::new());
+
+/// Ask systemd for the service's state and reflect it in the wizard.
 pub fn poll(app: &Shared, ui: &AppWindow) {
-    if !app.state.lock().unwrap().settings.service_mode {
+    if !app.state.lock().unwrap().settings.service_mode || POLLING.swap(true, Ordering::SeqCst) {
         return;
     }
     let (app, weak) = (app.clone(), ui.as_weak());
     std::thread::spawn(move || {
         let r = app.cli.call(&args(["service-status"]), None);
+        POLLING.store(false, Ordering::SeqCst);
         let app2 = app.clone();
         let _ = weak.upgrade_in_event_loop(move |ui| {
             let state = r.as_ref().map(|v: &Value| s(&v["state"])).unwrap_or_else(|_| "unknown".into());
@@ -125,55 +134,63 @@ pub fn poll(app: &Shared, ui: &AppWindow) {
                 "active" => "running",
                 "activating" | "reloading" => "starting",
                 "deactivating" => "stopping",
-                "failed" => "stopped",
                 _ => "stopped",
             };
-            if state == "failed" {
+            let previous = std::mem::replace(&mut *LAST_STATE.lock().unwrap(), state.clone());
+            if state == "failed" && previous != "failed" {
                 toast(&ui, "The background service failed; see the log in the Control center.", true);
             }
             wiz(&ui).set_broker_state(shown.into());
-            if active && app2.journal.lock().unwrap().is_none() {
-                // reopened while the service runs: show its address and follow its log
+            if active && !FOLLOWING.load(Ordering::SeqCst) {
+                // reopened while the service runs (or it restarted): show its address and follow this run's log
                 wiz(&ui).set_broker_url(mcp_url(&app2).into());
                 follow_journal(&app2, &ui);
+            } else if !active && state != "unknown" {
+                stop_following(&app2);
             }
             crate::view::render_steps(&app2, &ui);
         });
     });
 }
 
-fn follow_journal(app: &Shared, ui: &AppWindow) {
+/// Stop following the service's log, and reap the follower.
+pub fn stop_following(app: &Shared) {
+    FOLLOWING.store(false, Ordering::SeqCst);
     if let Some(mut old) = app.journal.lock().unwrap().take() {
         let _ = old.kill();
+        let _ = old.wait();
     }
+}
+
+fn follow_journal(app: &Shared, ui: &AppWindow) {
+    stop_following(app);
+    FOLLOWING.store(true, Ordering::SeqCst);
     let lines = Rc::new(VecModel::<SharedString>::default());
     wiz(ui).set_log_lines(slint::ModelRc::from(lines.clone()));
-    // Only this run of the service, not earlier (perhaps failed) starts.
-    let invocation = Command::new("systemctl")
-        .args(["--user", "show", "passbroker.service", "-p", "InvocationID", "--value"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
-    let mut filter = vec!["--user".to_string(), "-f".into(), "-n".into(), "200".into(), "-o".into(), "cat".into()];
-    if invocation.chars().all(|c| c.is_ascii_hexdigit()) && !invocation.is_empty() {
-        filter.extend([format!("_SYSTEMD_INVOCATION_ID={invocation}"), "+".into(), format!("USER_INVOCATION_ID={invocation}")]);
-    } else {
-        filter.extend(["-u".into(), "passbroker.service".into()]);
-    }
-    let child = Command::new("journalctl")
-        .args(&filter)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn();
-    let Ok(mut child) = child else {
-        wiz(ui).set_log_lines(strings(std::iter::once("journalctl isn't available; see `journalctl --user -u passbroker`".to_string())));
-        return;
-    };
-    let out = child.stdout.take();
-    *app.journal.lock().unwrap() = Some(child);
-    let w = ui.as_weak();
+    let (app, w) = (app.clone(), ui.as_weak());
+    // systemctl and journalctl run off the UI thread.
     std::thread::spawn(move || {
+        // Only this run of the service, not earlier (perhaps failed) starts.
+        let invocation = Command::new("systemctl")
+            .args(["--user", "show", "passbroker.service", "-p", "InvocationID", "--value"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+        let mut filter = vec!["--user".to_string(), "-f".into(), "-n".into(), "200".into(), "-o".into(), "cat".into()];
+        if invocation.chars().all(|c| c.is_ascii_hexdigit()) && !invocation.is_empty() {
+            filter.extend([format!("_SYSTEMD_INVOCATION_ID={invocation}"), "+".into(), format!("USER_INVOCATION_ID={invocation}")]);
+        } else {
+            filter.extend(["-u".into(), "passbroker.service".into()]);
+        }
+        let spawned = Command::new("journalctl").args(&filter).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn();
+        let Ok(mut child) = spawned else {
+            let _ = w.upgrade_in_event_loop(|ui| {
+                wiz(&ui).set_log_lines(strings(std::iter::once("journalctl isn't available; see `journalctl --user -u passbroker`".to_string())));
+            });
+            return;
+        };
+        let out = child.stdout.take();
+        *app.journal.lock().unwrap() = Some(child);
         let Some(out) = out else { return };
         for line in BufReader::new(out).lines().map_while(Result::ok) {
             let _ = w.upgrade_in_event_loop(move |ui| {

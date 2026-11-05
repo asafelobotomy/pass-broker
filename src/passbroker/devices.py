@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
-import os
 import re
 import socket
 import subprocess
@@ -24,6 +23,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from . import jsonfile
 from .vault import Login
 
 if TYPE_CHECKING:
@@ -138,19 +138,11 @@ class DeviceStore:
         self.path = path
 
     def load(self) -> list[Device]:
-        try:
-            data = json.loads(self.path.read_text() or "{}")
-        except FileNotFoundError:
-            return []
-        return [Device(**d) for d in data.get("actions", [])]
+        data = jsonfile.read(self.path, {})
+        return [jsonfile.build(Device, d) for d in data.get("actions", [])]
 
     def _save(self, devices: list[Device]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump({"actions": [asdict(d) for d in devices]}, f, indent=2)
-        os.replace(tmp, self.path)
+        jsonfile.write(self.path, {"actions": [asdict(d) for d in devices]})
 
     def add(self, d: Device) -> str:
         """Save the action; for a self-signed device, record (pin) its certificate now. Returns its fingerprint."""

@@ -225,7 +225,7 @@ pub fn complete_step(app: &Shared, ui: &AppWindow, i: usize) {
         let address = st.address(&ts_host);
         if !st.locked_address.is_empty() && st.locked_address != address && st.steps[ASSISTANTS].completed {
             st.invalidate(ASSISTANTS);
-            note = " The address changed, so connected apps must connect again (step 5).".into();
+            note = " The address changed, so connected apps must connect again (step 6).".into();
         }
         st.locked_address = address;
     }
