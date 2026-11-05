@@ -23,10 +23,11 @@ apps), the bot's next look at the tab finds it and goes back first.
 from __future__ import annotations
 
 import asyncio
+import posixpath
 import re
 import time
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from .mailcode import site_domains
 from .origin import host_of
@@ -98,10 +99,24 @@ class PolicyMixin:
         return None
 
 
+def normalize_path(path: str) -> str:
+    """The path a server is likely to act on: percent-decoded (repeatedly, for double encoding),
+    `//` collapsed, `.` and `..` resolved, lower-cased. `/pay%6Dents` and `//a/./b/../pay` must
+    not slip past a blocked `/payments` or `/a/pay`."""
+    for _ in range(3):
+        decoded = unquote(path)
+        if decoded == path:
+            break
+        path = decoded
+    path = posixpath.normpath("/" + re.sub(r"/+", "/", path.replace("\\", "/")))
+    return ("/" if path in ("", ".") else path).lower()
+
+
 def page_matches(pattern: str, host: str, path: str) -> bool:
     """`example.com/account/pay*` against a host and path: subdomains count, the path is a prefix."""
     phost, _, ppath = pattern.lower().partition("/")
     if not (host == phost or host.endswith("." + phost)):
         return False
-    regex = re.escape("/" + ppath).replace(r"\*", ".*")
-    return re.match(regex, path.lower()) is not None
+    wanted = normalize_path("/" + ppath).rstrip("/") if ppath.strip("/") else ""
+    regex = re.escape(wanted).replace(r"\*", ".*")
+    return re.match(regex, normalize_path(path)) is not None

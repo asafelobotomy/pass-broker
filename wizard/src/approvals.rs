@@ -13,10 +13,14 @@ use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Requests answered here, so one isn't shown again in the moment before the broker removes it.
 static ANSWERED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// When the request on screen appeared: its buttons wait a moment, so a double-click (or a
+/// held Enter) meant for one request can't answer the next one unseen.
+static SHOWN_AT: Mutex<Option<Instant>> = Mutex::new(None);
+const ARM_DELAY: Duration = Duration::from_millis(1000);
 
 struct Pending {
     id: String,
@@ -66,6 +70,10 @@ pub fn tick(ui: &AppWindow) {
                 g.set_approval_id(p.id.clone().into());
                 g.set_approval_title(p.title.clone().into());
                 g.set_approval_body(p.body.clone().into());
+                g.set_approval_armed(false);
+                *SHOWN_AT.lock().unwrap() = Some(Instant::now());
+            } else if SHOWN_AT.lock().unwrap().is_some_and(|at| at.elapsed() >= ARM_DELAY) {
+                g.set_approval_armed(true);
             }
             g.set_approval_seconds((p.expires - now()).max(0.0).round() as i32);
             g.set_approval_queue(waiting.len() as i32);
@@ -88,7 +96,7 @@ pub fn wire(ui: &AppWindow) {
         move |allow| {
             let Some(ui) = w.upgrade() else { return };
             let id = wiz(&ui).get_approval_id().to_string();
-            if id.is_empty() {
+            if id.is_empty() || !wiz(&ui).get_approval_armed() {
                 return;
             }
             ANSWERED.lock().unwrap().push(id.clone());

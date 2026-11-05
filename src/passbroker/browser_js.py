@@ -7,7 +7,7 @@ backstop for pages that lie about their fields or echo secrets.
 SENSITIVE_CSS = (
     "input[type=password], [data-pb-secret], input[autocomplete~='one-time-code'], "
     "input[autocomplete~='current-password'], input[autocomplete~='new-password'], "
-    "input[autocomplete^='cc-'], input[maxlength='1']"
+    "input[autocomplete^='cc-'], input[maxlength='1'], [data-pb-masked]"
 )
 
 USERNAME_SELECTORS = [

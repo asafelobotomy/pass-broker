@@ -59,3 +59,43 @@ def test_debug_variables_are_dropped(monkeypatch):
     gone = drop_debug_env()
     assert set(gone) >= {"DEBUG", "PWDEBUG", "NODE_OPTIONS", "PW_TEST_X", "PLAYWRIGHT_SKIP_NAVIGATION_CHECK"}
     assert os.environ["PLAYWRIGHT_BROWSERS_PATH"] == "/opt/pw" and "DEBUG" not in os.environ
+
+
+def test_secrets_are_scrubbed_before_personal_details_are_masked():
+    from passbroker.tools import for_bot
+
+    red = Redactor()
+    red.add("hunter2-555.010.0199")  # a password that ends in something phone-shaped
+    out = for_bot(red, {"text": "your password is hunter2-555.010.0199"}, hide_personal=True)
+    assert "hunter2" not in out["text"] and MASK in out["text"]
+
+
+@pytest.mark.parametrize(
+    "shown",
+    ["?p=p@ss%20w0rd!", "?p=p%40ss%20w0rd%21", "p%40ss+w0rd%21"],  # how much a page or browser encodes varies
+)
+def test_partly_encoded_secrets_are_caught(shown):
+    red = Redactor()
+    red.add("p@ss w0rd!")
+    assert red.contains_secret(shown) and "w0rd" not in red.scrub(shown)
+
+
+def test_secret_inside_basic_auth_is_caught():
+    import base64
+
+    red = Redactor()
+    red.add("Hunter2Secret")
+    for user in ("a", "ab", "abc"):  # every base64 alignment
+        header = "Basic " + base64.b64encode(f"{user}:Hunter2Secret".encode()).decode()
+        assert red.contains_secret(header), user
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/gp/your-account/payments", "/gp/your-account/pay%6dents", "//gp//your-account/payments/x",
+     "/gp/./your-account/x/../payments", "/GP/Your-Account/Payments", "/gp/your-account/pay%256dents"],
+)
+def test_blocked_pages_survive_encoding_tricks(path):
+    from passbroker.policy import page_matches
+
+    assert page_matches("amazon.co.uk/gp/your-account/payments", "www.amazon.co.uk", path)

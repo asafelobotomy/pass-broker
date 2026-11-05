@@ -55,6 +55,7 @@ class Device:
     body: str = ""  # http: request body, may contain {secret}
     content_type: str = "application/json"
     insecure_tls: bool = False  # self-signed: pin its certificate (recorded when the action is added)
+    plain_http_ok: bool = False  # you accept sending the password unencrypted to an http:// URL
     tls_cert_pem: str = ""  # the pinned certificate
     item: str = ""  # vault item whose password is used; empty = none
     return_output: bool = False
@@ -120,6 +121,11 @@ def validate(d: Device) -> None:
             raise DeviceError("auth must be none, basic, bearer or body")
         if d.auth == "body" and "{secret}" not in d.body:
             raise DeviceError("put {secret} in the body where the password goes")
+        if parts.scheme == "http" and d.auth != "none" and not d.plain_http_ok:
+            raise DeviceError("this would send the password unencrypted to an http:// address: use https, "
+                              "or turn on sending it over plain http")
+        if d.method.upper() not in ("GET", "POST", "PUT", "PATCH", "DELETE"):
+            raise DeviceError("method must be GET, POST, PUT, PATCH or DELETE")
         target = parts.hostname
     if _this_pc(target):
         raise DeviceError("device actions run on your home server and devices, not on this PC")
@@ -156,6 +162,11 @@ class DeviceStore:
             from .tlspin import fetch_https_cert, fingerprint
 
             parts = urlsplit(d.url)
+            if not d.tls_cert_pem:
+                # Re-saving the same device keeps the certificate recorded the first time: fetching
+                # it again would silently trust whatever answers now (someone in between, say).
+                same = next((x for x in self.load() if x.name == d.name and x.tls_cert_pem and urlsplit(x.url).netloc == parts.netloc), None)
+                d.tls_cert_pem = same.tls_cert_pem if same else ""
             if not d.tls_cert_pem:
                 try:
                     d.tls_cert_pem = fetch_https_cert(parts.hostname or "", parts.port or 443)

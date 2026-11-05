@@ -45,6 +45,7 @@ pub fn wire_extras(app: &Shared, ui: &AppWindow) {
                 "username": g.get_d_username().trim(),
                 "body": g.get_d_body().trim(),
                 "insecure_tls": g.get_d_insecure(),
+                "plain_http_ok": g.get_d_plain_http(),
                 "item": item,
                 "return_output": g.get_d_return(),
             })

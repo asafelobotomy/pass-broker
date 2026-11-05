@@ -12,6 +12,8 @@ import hashlib
 import imaplib
 import ssl
 
+NO_CHECK_TIME = 0x200000
+
 
 def fetch_https_cert(host: str, port: int = 443) -> str:
     """The PEM certificate an HTTPS server presents (not verified: this is the pinning step)."""
@@ -46,6 +48,9 @@ def pinned_context(pem: str) -> ssl.SSLContext:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.load_verify_locations(cadata=pem)
     ctx.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
+    # Dates prove nothing about a certificate you recorded yourself, and home devices let theirs
+    # expire: without this, the action would fail for good once it did (OpenSSL X509_V_FLAG_NO_CHECK_TIME).
+    ctx.verify_flags |= NO_CHECK_TIME
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_REQUIRED
     return ctx

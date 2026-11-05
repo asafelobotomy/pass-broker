@@ -30,6 +30,14 @@ MAX_BOTS_PER_CONNECTION = 20
 CALLS_PER_10_MIN = 300
 
 
+def for_bot(redactor: Redactor, result: Any, hide_personal: bool) -> Any:
+    """What a bot may see of a page-derived result. Secrets are scrubbed before personal details
+    are masked: masking could rewrite part of a secret (a password ending in something
+    phone-shaped) so that the scrubber no longer recognises it."""
+    result = redactor.scrub_obj(result)
+    return mask_obj(result) if hide_personal else result
+
+
 def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: BrokerOAuth, bots: Bots) -> None:
     notices: list[float] = []
     calls: dict[str, list[float]] = {}
@@ -81,9 +89,12 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
         return client, await broker.browser.session(client)
 
     def remember(client: str, result: dict[str, Any]) -> dict[str, Any]:
-        """Every page-derived result passes here: note the site, and mask personal details."""
+        """Every page-derived result passes here: note the site, and mask personal details.
+
+        Secrets are scrubbed first: masking could rewrite part of a secret (a password ending in
+        something phone-shaped) so that the scrubber no longer finds it whole."""
         sites[client] = host_of(result.get("url", "")) if result.get("url") else sites.get(client.lower(), "")
-        return mask_obj(result) if broker.hides_personal(client) else result
+        return for_bot(redactor, result, broker.hides_personal(client))
 
     # ---- sign-ins ---------------------------------------------------------------------
 

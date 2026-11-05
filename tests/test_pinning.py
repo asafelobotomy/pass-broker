@@ -16,9 +16,10 @@ from passbroker.tlspin import fingerprint
 pytestmark = pytest.mark.skipif(not shutil.which("openssl"), reason="openssl not installed")
 
 
-def _self_signed(folder, name):
+def _self_signed(folder, name, expired=False):
     key, cert = folder / f"{name}.key", folder / f"{name}.pem"
-    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj", f"/CN={name}",
+    dates = ["-not_before", "20200101000000Z", "-not_after", "20200102000000Z"] if expired else ["-days", "2"]
+    subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", *dates, "-subj", f"/CN={name}",
                     "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
     return key, cert
 
@@ -77,3 +78,28 @@ def test_pinning_needs_https():
 def test_bridge_without_a_pinned_certificate_is_refused():
     with pytest.raises(ssl.SSLError, match="pinned"):
         fetch_code(MailSettings(item="Mail bridge"), "me", "pw", {"example.com"})
+
+
+def test_expired_pinned_certificate_still_works_and_resaving_keeps_the_pin(tmp_path, monkeypatch):
+    """Home devices let their certificates expire; the pin is the exact certificate, so dates don't matter.
+    Re-saving the action keeps that certificate instead of trusting whatever answers now."""
+    monkeypatch.setattr(devices_mod, "_this_pc", lambda host: False)
+    key, cert = _self_signed(tmp_path, "router", expired=True)
+    server = _Server(key, cert)
+    store = DeviceStore(tmp_path / "devices.json")
+    try:
+        url = f"https://127.0.0.1:{server.port}/x"
+        first = store.add(Device(name="router", kind="http", url=url, insecure_tls=True))
+        assert devices_mod.run(store.get("router"), None)["ok"]
+    finally:
+        server.close()
+    key2, cert2 = _self_signed(tmp_path, "imposter")
+    imposter = _Server(key2, cert2)  # a different certificate now answers...
+    try:
+        imposter_url = f"https://127.0.0.1:{imposter.port}/x"
+        store._save([Device(name="router", kind="http", url=imposter_url, insecure_tls=True, tls_cert_pem=cert.read_text())])
+        again = store.add(Device(name="router", kind="http", url=imposter_url, insecure_tls=True, description="edited"))
+        assert again == first  # ...but re-saving kept the recorded certificate
+        assert not devices_mod.run(store.get("router"), None)["ok"]
+    finally:
+        imposter.close()

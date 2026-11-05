@@ -59,9 +59,10 @@ class FillsMixin:
             return None
 
     async def _fill_username(self: "Broker", s: Session, frame: Frame, field: Locator, value: str, verify: Callable[[Frame], None]) -> None:
-        verify(frame)
+        # Pinned like a password: a frame that navigates mid-fill gets nothing, and the field
+        # is then treated as secret, so screenshots black it out too.
         await field.evaluate(MASK_JS)  # snapshots show it masked, like list_logins does
-        await field.fill(value)
+        await s.fill_pinned(frame, field, value, verify)
 
     async def fill_login(self: "Broker", client: str, handle: str, reason: str = "") -> dict[str, Any]:
         login = self._login(client, handle)

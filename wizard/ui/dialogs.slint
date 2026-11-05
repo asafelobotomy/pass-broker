@@ -36,8 +36,8 @@ export component ApprovalDialog inherits Rectangle {
             HorizontalLayout {
                 spacing: 10px;
                 alignment: end;
-                Button { text: "Deny"; clicked => { Wiz.approval-answer(false); } }
-                Button { text: "Allow"; primary: true; clicked => { Wiz.approval-answer(true); } }
+                Button { text: "Deny"; enabled: Wiz.approval-armed; clicked => { Wiz.approval-answer(false); } }
+                Button { text: "Allow"; primary: true; enabled: Wiz.approval-armed; clicked => { Wiz.approval-answer(true); } }
             }
         }
     }

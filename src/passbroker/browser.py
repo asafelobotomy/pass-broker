@@ -22,6 +22,7 @@ import socket
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
 from playwright.async_api import Browser as PWBrowser
@@ -78,6 +79,7 @@ class Browser:
         self._keep = keep_sessions
         self._idle_s = idle_minutes * 60
         self._allow_private = allow_private
+        self._sandbox = True
         self._pw = None
         self._browser: PWBrowser | None = None
         self._sessions: dict[str, Session] = {}
@@ -107,9 +109,21 @@ class Browser:
         await self.proxy.start()
         self._pw = await async_playwright().start()
         if not self._keep:
-            self._browser = await self._pw.chromium.launch(**self._launch_opts())
+            self._browser = await self._sandboxed(lambda opts: self._pw.chromium.launch(**opts))
         if self._idle_s > 0 and not self._keep:
             self._idle_task = asyncio.create_task(self._idle_watch())
+
+    async def _sandboxed(self, launch: Callable[[dict[str, object]], Awaitable[Any]]) -> Any:
+        """Launch with Chromium's own sandbox (Playwright turns it off by default), which walls
+        each page's renderer off from your files and processes. It needs unprivileged user
+        namespaces; where the system forbids them, fall back rather than not start at all."""
+        if self._sandbox:
+            try:
+                return await launch({**self._launch_opts(), "chromium_sandbox": True})
+            except Exception as e:
+                self._sandbox = False
+                log.warning("Chromium's sandbox isn't available here (%s); running without it", str(e).splitlines()[0][:120])
+        return await launch(self._launch_opts())
 
     def _launch_opts(self) -> dict[str, object]:
         # channel="chromium" picks full Chromium's new headless mode over the
@@ -140,9 +154,10 @@ class Browser:
         if self._keep:
             folder = self._profile / re.sub(r"[^\w.-]", "_", key)
             folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-            ctx = await self._pw.chromium.launch_persistent_context(
-                str(folder), accept_downloads=False, viewport=VIEWPORT, service_workers="block", **self._launch_opts(),
-            )
+            pw = self._pw
+            ctx = await self._sandboxed(lambda opts: pw.chromium.launch_persistent_context(
+                str(folder), accept_downloads=False, viewport=VIEWPORT, service_workers="block", **opts,
+            ))
         else:
             assert self._browser is not None
             ctx = await self._browser.new_context(accept_downloads=False, viewport=VIEWPORT, service_workers="block")

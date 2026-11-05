@@ -155,7 +155,7 @@ def test_device_actions_never_target_this_pc():
         with pytest.raises(DeviceError, match="not on this PC"):
             devices_mod.validate(Device(name="x", kind="ssh", host=host, command="true"))
     with pytest.raises(DeviceError, match="not on this PC"):
-        devices_mod.validate(Device(name="x", kind="http", url="http://127.0.0.1:8080/", item="Router", auth="basic"))
+        devices_mod.validate(Device(name="x", kind="http", url="http://127.0.0.1:8080/", item="Router", auth="basic", plain_http_ok=True))
     with pytest.raises(DeviceError):
         devices_mod.validate(Device(name="x", kind="wol", mac="nonsense"))
     devices_mod.validate(Device(name="nas", kind="wol", mac="aa:bb:cc:dd:ee:ff"))
@@ -193,7 +193,7 @@ async def test_http_device_action_returns_only_done(setup, monkeypatch):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     monkeypatch.setattr(devices_mod, "_this_pc", lambda host: False)  # stand in for a router on the LAN
     try:
-        broker.devices.add(Device(name="wake-nas", kind="http", url=f"http://127.0.0.1:{httpd.server_address[1]}/wake",
+        broker.devices.add(Device(name="wake-nas", kind="http", plain_http_ok=True, url=f"http://127.0.0.1:{httpd.server_address[1]}/wake",
                                   auth="body", body='{"password": "{secret}", "target": "nas"}', item="Router"))
         bots.set_access("mailbot", {"devices": ["wake-nas"]})
         result = await broker.run_device_action(MAILBOT, "wake-nas", reason="nightly backup")
@@ -201,3 +201,14 @@ async def test_http_device_action_returns_only_done(setup, monkeypatch):
         assert json.loads(got[0]) == {"password": ROUTER_PASS, "target": "nas"}
     finally:
         httpd.shutdown()
+
+
+def test_password_over_plain_http_needs_consent_and_methods_are_standard():
+    d = Device(name="x", kind="http", url="http://router.example.org/api", item="Router", auth="bearer")
+    with pytest.raises(DeviceError, match="unencrypted"):
+        devices_mod.validate(d)
+    d.plain_http_ok = True
+    devices_mod.validate(d)
+    devices_mod.validate(Device(name="x", kind="http", url="http://router.example.org/api"))  # no password: fine
+    with pytest.raises(DeviceError, match="method"):
+        devices_mod.validate(Device(name="x", kind="http", url="https://router.example.org/", method="TRACE"))
