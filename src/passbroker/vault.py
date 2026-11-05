@@ -299,7 +299,7 @@ class ProtonPassBackend:
         # Agent sessions can't use --show-secrets, so the listing carries only
         # titles and ids; each item's own view then supplies its websites.
         out = self._run(
-            ["item", "list", "--vault-name", vault, "--filter-type", "login", "--output", "json"],
+            ["item", "list", "--vault-name", vault, "--filter-type", "login", "--filter-state", "active", "--output", "json"],
             "pass-broker: list login titles and websites",
         )
         try:
@@ -310,8 +310,8 @@ class ProtonPassBackend:
         logins = []
         for item in items if isinstance(items, list) else []:
             key = item.get("id") or item.get("item_id") or item.get("itemId")
-            if not key:
-                continue
+            if not key or str(item.get("state", "active")).lower() != "active":
+                continue  # trashed items stay out of reach, even from an older pass-cli that lists them
             key = str(key)
             title = str(item.get("title") or next((v for k, v in _walk(item) if k in ("title", "name") and isinstance(v, str)), "untitled"))
             urls, username, has_totp = self._extract(item)

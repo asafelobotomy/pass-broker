@@ -5,6 +5,9 @@ item, finds the newest message from the site's domain received in the last few
 minutes, takes the code out of it and types it into the page. Bots never see
 the code or the mail; they only learn whether it was submitted. Messages are
 read with BODY.PEEK, so they stay unread.
+
+For an account a bot made with its own email alias, only mail sent to that alias counts, so a
+code meant for one of your own accounts on the same site never goes to the bot's.
 """
 
 from __future__ import annotations
@@ -105,8 +108,19 @@ def extract_code(subject: str, body: str) -> str | None:
     return None
 
 
-def fetch_code(settings: MailSettings, user: str, password: str, domains: set[str], now: float | None = None) -> str | None:
-    """Newest code from a sender in `domains` within the age limit, or None."""
+def _sent_to(msg: email.message.Message, address: str) -> bool:
+    from email.utils import getaddresses
+
+    # Proton's alias forwarding keeps To as the sender wrote it (the alias, unless it was a Bcc) and
+    # puts the alias it arrived through in X-SimpleLogin-Envelope-To; From stays the real sender.
+    envelope = ("To", "Cc", "Delivered-To", "X-Original-To", "X-SimpleLogin-Envelope-To")
+    headers = [str(v) for h in envelope for v in msg.get_all(h, [])]
+    return address.lower() in {a.lower() for _, a in getaddresses(headers)}
+
+
+def fetch_code(settings: MailSettings, user: str, password: str, domains: set[str], now: float | None = None,
+               to: str = "") -> str | None:
+    """Newest code from a sender in `domains` within the age limit (and sent to `to`, if given), or None."""
     now = now or time.time()
     if settings.cert_pem:
         from .tlspin import pinned_context
@@ -131,6 +145,8 @@ def fetch_code(settings: MailSettings, user: str, password: str, domains: set[st
             sender = parseaddr(msg.get("From", ""))[1].lower()
             sender_domain = sender.rpartition("@")[2]
             if not any(sender_domain == d or sender_domain.endswith("." + d) for d in domains):
+                continue
+            if to and not _sent_to(msg, to):
                 continue
             try:
                 sent = parsedate_to_datetime(msg.get("Date")).timestamp()
@@ -164,13 +180,16 @@ class MailMixin:
         self._permit(client, "email_codes")
         login = self._login(client, handle)
         domains = site_domains(login.urls)
+        bot = client.partition("/")[2]
+        made = self.bots.created(bot, login.title) if self.bots is not None and bot else None
+        to = str((made or {}).get("email", ""))  # the bot's alias, if it made this account with it
 
         async def from_mail(host: str) -> str:
             bridge = await self._item(self.mail.item, "email codes")
             user = bridge.username or await self._secret(client, bridge, "username", "read a sign-in email")
             password = await self._secret(client, bridge, "password", f"read a sign-in email from {', '.join(sorted(domains))}")
             try:
-                code = await asyncio.to_thread(self.mail_fetch, self.mail, user, password, domains)
+                code = await asyncio.to_thread(self.mail_fetch, self.mail, user, password, domains, to=to)
             except ssl.SSLError as e:
                 raise BrokerError(str(e) if "pinned" in str(e) else "Bridge's certificate changed or couldn't be checked; if Bridge was reinstalled, ask the user to press "
                                   "Record Bridge's certificate again under Email codes in Pass Broker") from None

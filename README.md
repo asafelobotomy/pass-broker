@@ -334,20 +334,29 @@ files you're happy to send to xAI/Cursor.
 
 A bot you allow can sign up on a site by itself, so you don't have to make every account for it:
 
-1. It opens the site's sign-up page and calls `create_login` with a username, or with
-   `email_alias` for a new hide-my-email address that forwards to you. It can ask for a password
-   length (12-64) and no symbols, for sites that refuse them.
-2. You approve on your desktop. The request names the site, the vault and the username or alias.
+1. It opens the site's sign-up page and calls `create_login`, with a username if the form asks for
+   one. It can ask for a password length (12-64) and no symbols, for sites that refuse them.
+2. You approve on your desktop. The request names the site, the vault, the username and the email.
 3. Proton Pass makes the password and saves the login, bound to that site, as
-   `site (bot)`. The password never passes through the broker's memory or a command line until it's
-   filled. The bot gets a handle.
-4. The bot fills in the form's other fields itself, then calls `fill_signup`. The broker fills the
-   username or email and every password field (password and confirm), and submits. Approving the
-   account covers this one form for 10 minutes.
+   `site (bot)`, with the bot's email. The password never passes through the broker's memory or a
+   command line until it's filled. The bot gets a handle.
+4. The bot fills in the form's other fields itself (name, birthday, ticking the terms), then calls
+   `fill_signup`. The broker fills every empty username, email and confirm-email field and every
+   password and confirm-password field, then submits; it says which it filled. Forms that ask for
+   the email first and the password on a later page take two calls. Approving the account covers
+   its sign-up form for 10 minutes.
+
+**Each bot has one email address.** The first time a bot needs one (`email_address`, or
+`create_login` with `email_alias`), you approve a new hide-my-email alias that forwards to you. That
+alias is then the bot's for good: every account it makes is saved with it and filled in with it,
+without asking for another, and the bot may give it out where a site or form wants an email. It's
+the only address the bot learns. The tab lists each bot's address; to stop mail to one, turn the
+alias off in Proton Pass.
 
 The new login is granted to the bot that made it, so it can sign in later with `fill_login`, still
 with your Allow each time. If the site then emails a code, `fill_email_code` reads it (when the bot
-may use email codes), aliases included.
+may use email codes). For an account made with the bot's alias, only mail sent to that alias counts,
+so a code meant for your own account on the same site never goes to the bot's.
 
 Set it up in the wizard's **Bot accounts** tab (step 5), or with
 `passbroker api accounts-setup --vault "Bot Accounts"` while pass-cli is signed in as you. That
@@ -363,7 +372,7 @@ Limits:
   not for apps on your home server. Those can use a device action with a login you made.
 - Sites that confirm by clicking a link in an email, or that ask the bot to set up 2FA, still need
   you.
-- Each alias counts towards your Proton plan's alias limit.
+- Each bot's alias counts once towards your Proton plan's alias limit.
 
 ### Per-bot access and sessions
 

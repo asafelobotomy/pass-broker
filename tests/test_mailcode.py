@@ -18,8 +18,8 @@ pytestmark = pytest.mark.needs("openssl")  # for the test certificates
 NOW = time.time()
 
 
-def _mail(sender: str, subject: str, body: str, age_s: float) -> bytes:
-    return (f"From: {sender}\r\nTo: me@proton.me\r\nSubject: {subject}\r\n"
+def _mail(sender: str, subject: str, body: str, age_s: float, to: str = "me@proton.me") -> bytes:
+    return (f"From: {sender}\r\nTo: {to}\r\nSubject: {subject}\r\n"
             f"Date: {email.utils.formatdate(NOW - age_s)}\r\nContent-Type: text/plain\r\n\r\n{body}\r\n").encode()
 
 
@@ -129,3 +129,33 @@ def test_a_different_certificate_is_refused(bridge, tmp_path):
         fetch_code(MailSettings(item="Bridge", port=server.port, cert_pem=other.read_text()), "me@proton.me", "bridge-pass",
                    {"shop.example"}, now=NOW)
     assert server.logins == []  # the password never went to it
+
+
+def test_a_bots_alias_gets_only_codes_sent_to_it(tmp_path):
+    """The same site emails a code to you and one to the bot's alias: each account gets its own."""
+    key, cert = _self_signed(tmp_path, "bridge")
+    server = FakeBridge(key, cert, messages=[
+        _mail("Shop <no-reply@shop.example>", "Code", "Bot code 246810", 300, to="Maker <maker.x1@passmail.net>"),
+        _mail("Shop <no-reply@shop.example>", "Code", "Your code 135791", 60),
+    ])
+    try:
+        settings = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text())
+        fetch = lambda to: fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW, to=to)
+        assert fetch("") == "135791"  # your own sign-in: the newest from the site
+        assert fetch("MAKER.x1@passmail.net") == "246810"
+        assert fetch("other.y2@passmail.net") is None
+    finally:
+        server.close()
+
+
+def test_a_bcc_to_the_alias_counts_by_its_envelope(tmp_path):
+    """As Proton forwards it: To names someone else, the envelope header names the alias."""
+    key, cert = _self_signed(tmp_path, "bridge")
+    raw = _mail("Shop <no-reply@shop.example>", "Code", "Bot code 246810", 30, to="list@shop.example")
+    raw = raw.replace(b"Subject:", b"X-SimpleLogin-Envelope-To: maker.x1@passmail.net\r\nDelivered-To: me@proton.me\r\nSubject:")
+    server = FakeBridge(key, cert, messages=[raw])
+    try:
+        settings = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text())
+        assert fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW, to="maker.x1@passmail.net") == "246810"
+    finally:
+        server.close()

@@ -134,6 +134,10 @@ pub fn refresh(app: &Shared, ui: &AppWindow) {
             .map(|c| format!("{}  ·  {}  ·  by {}  ·  {}", s(&c["title"]), s(&c["site"]), s(&c["bot"]), s(&c["at"])).into())
             .collect();
         g.set_acc_created(ModelRc::new(VecModel::from(made)));
+        let emails: Vec<slint::SharedString> = acc["emails"].as_array().into_iter().flatten()
+            .map(|e| format!("{}  ·  {}  ·  since {}", s(&e["bot"]), s(&e["address"]), s(&e["at"])).into())
+            .collect();
+        g.set_acc_emails(ModelRc::new(VecModel::from(emails)));
     });
 }
 

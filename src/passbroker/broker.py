@@ -24,6 +24,7 @@ from .keys import KeyStore
 from .mailcode import MailMixin, MailSettings
 from .policy import PolicyMixin
 from .redact import Redactor, clean
+from .signup import SignupMixin
 from .unlock import Unlockers
 from .vault import Backend, Login, VaultError
 
@@ -39,7 +40,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, AccountsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, SignupMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -74,6 +75,7 @@ class Broker(FillsMixin, AccountsMixin, FilesMixin, DevicesMixin, MailMixin, Pol
         self.mail = mail
         self.account_settings = account_settings  # re-read on use: set up without a restart
         self._fresh: dict[tuple[str, str], float] = {}
+        self._alias_lock = asyncio.Lock()  # one email alias per bot, even when two calls race
         if browser is not None:
             browser.page_refusal = self.page_refusal
 

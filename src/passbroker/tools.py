@@ -163,17 +163,28 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
             client = await who(ctx, bot, "email code")
             return safe(remember(client, await broker.fill_email_code(client, handle, reason)))
 
+    @mcp.tool(description="Your bot's own email address: a hide-my-email alias that forwards to the user. The first time, the user "
+              "approves making it; after that it is yours for good, every account you make uses it, and fill_email_code reads codes "
+              "sent to it. Use it wherever a site or form wants your email. " + BOT + " " + REASON)
+    async def email_address(ctx: Context, bot: str, reason: str = "") -> dict[str, Any]:
+        with errors():
+            client = await who(ctx, bot, "email address")
+            return safe(await broker.email_address(client, reason))
+
     @mcp.tool(description="Make a new account login for the site of the current page (open its sign-up page first). The user approves; "
-              "Proton Pass generates the password and saves it in the user's vault. You get a handle, never the password. Give a username, "
-              "or email_alias=true for a new hide-my-email address. length 12-64; symbols=false for sites that refuse them. " + BOT + " " + REASON)
+              "Proton Pass generates the password and saves it in the user's vault. You get a handle, never the password. If the form "
+              "asks for a username, give one. Your email address (see email_address) is saved with every account you make; "
+              "email_alias=true makes it now if you have none. length 12-64; symbols=false for sites that refuse them. " + BOT + " " + REASON)
     async def create_login(ctx: Context, bot: str, username: str = "", email_alias: bool = False, length: int = 20,
                            symbols: bool = True, reason: str = "") -> dict[str, Any]:
         with errors():
             client = await who(ctx, bot, "make account", await page_site(f"{oauth.name_for((ctx.headers or {}).get('authorization'))}/{bot}"))
             return safe(await broker.create_login(client, username, email_alias, length, symbols, reason))
 
-    @mcp.tool(description="Fill a sign-up form with a login from create_login: the username or email (if empty) and every password field, "
-              "then submit. Fill the other fields and tick any boxes first. You never see the password. " + BOT + " " + REASON)
+    @mcp.tool(description="Fill a sign-up form with a login from create_login: every empty username, email and confirm-email field, "
+              "and every password and confirm-password field, then submit. Fill the other fields (name, birthday) and tick any boxes "
+              "first. If the form asks for the email first and the password on a later page, call it again there. "
+              "You never see the password. " + BOT + " " + REASON)
     async def fill_signup(ctx: Context, bot: str, handle: str, reason: str = "") -> dict[str, Any]:
         with errors():
             client = await who(ctx, bot, "sign up", await page_site(f"{oauth.name_for((ctx.headers or {}).get('authorization'))}/{bot}"))

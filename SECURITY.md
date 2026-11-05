@@ -33,7 +33,7 @@ program can read your keyring and the broker's files directly.
 | Layer | Stops |
 |---|---|
 | Proton Pass agent token limited to one **Agent** vault, `viewer` role, short expiry; if you turn on bot accounts, `editor` on their own separate vault and nowhere else | a compromised broker reaching your real vault, or changing or deleting the logins you put in the Agent vault |
-| Bot-made accounts: off until you set them up, then per bot; each needs your Allow (site, vault, username or alias shown), at most 10 a day per bot; Proton Pass generates the password (never on a command line), the login is bound to the sign-up page's host and granted only to the bot that made it | a bot filling your vault with accounts, or learning or reusing a password it had made |
+| Bot-made accounts: off until you set them up, then per bot; each needs your Allow (site, vault, username and email shown), at most 10 a day per bot; one email alias per bot, made only with your Allow, and email codes for its accounts read only from mail sent to that alias; Proton Pass generates the password (never on a command line), the login is bound to the sign-up page's host and granted only to the bot that made it | a bot filling your vault with accounts or aliases, learning or reusing a password it had made, or getting a code meant for your own account |
 | Token stored in your system keyring, passed to `pass-cli` by environment, never argv | the token showing up in process lists or files |
 | Opaque, per-run handles | the model naming items or fields it wasn't shown |
 | Origin binding (page **and** frame must be HTTPS on a saved host) | prompt injection that fills your password on `evil.com` or in a cross-site iframe |

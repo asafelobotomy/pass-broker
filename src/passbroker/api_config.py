@@ -51,9 +51,11 @@ def c_config(a) -> dict[str, Any]:
     from .mailcode import MailSettings
 
     mail = MailSettings.load(ops.dirs()[0] / "mail.json")
-    made = [{"bot": b["name"], **c} for b in ops.bots_store().list() for c in b.get("created", [])]
+    bots = ops.bots_store().list()
+    made = [{"bot": b["name"], **c} for b in bots for c in b.get("created", [])]
+    emails = [{"bot": b["name"], **b["email"]} for b in bots if b.get("email")]
     return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
-            "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True)}}
+            "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True), "emails": emails}}
 
 
 def c_config_add(a) -> dict[str, Any]:

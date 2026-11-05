@@ -194,6 +194,7 @@ export global Wiz {
     in property <bool> acc-enabled: false;
     in-out property <string> acc-vault: "Bot Accounts";
     in property <[string]> acc-created;
+    in property <[string]> acc-emails;  // each bot's own email alias
     callback acc-setup;
     callback acc-off;
 

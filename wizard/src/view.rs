@@ -170,6 +170,7 @@ pub fn audit_row(e: &Value) -> AuditRow {
         "fill_login" => s(&e["step"]),
         "create_login" => "account made".into(),
         "fill_signup" => "signed up".into(),
+        "email_alias" => "email address made".into(),
         "list_logins" => format!("{} logins", s(&e["count"])),
         _ => String::new(),
     };

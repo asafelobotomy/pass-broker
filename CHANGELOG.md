@@ -4,6 +4,19 @@ Each release on [GitHub](https://github.com/asafelobotomy/pass-broker/releases) 
 and fuller notes. Versions follow [semantic versioning](https://semver.org): before 1.0, a new
 minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes.
 
+## Unreleased
+
+- **Each bot has one email address**: the first alias a bot gets (new `email_address` tool, or
+  `create_login` with `email_alias`) stays its own, is saved with every account it makes and is
+  listed in the wizard. Email codes for those accounts come only from mail sent to that alias.
+- `fill_signup` fills every account field: username, email and confirm-email, password and
+  confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email
+  first and the password on a later page. It says what it filled and what it couldn't.
+- Fixed: a form with both a username and an email field could get the email in the username
+  field and nothing in the email field.
+- Fixed: logins you had moved to the trash in Proton Pass were still listed, and bots could use
+  them.
+
 ## 0.3.1
 
 - `passbroker --version`; SECURITY.md says which versions get fixes.

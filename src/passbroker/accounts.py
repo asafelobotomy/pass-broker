@@ -2,9 +2,11 @@
 
 The bot opens a site's sign-up page and calls create_login. You approve on your desktop; Proton
 Pass then generates the password and saves a new login, bound to that site, in a vault of its
-own (**Bot Accounts** by default). The bot gets only a handle. fill_signup fills the username or
-email and every password field (password and confirm) and submits, like a sign-in. The new login
-is granted to the bot that made it, so it can sign in with it later, still with your approval.
+own (**Bot Accounts** by default). The bot gets only a handle; signup.py fills the form. The new
+login is granted to the bot that made it, so it can sign in with it later, still with your approval.
+
+Each bot has one email address: the first hide-my-email alias it gets (with your approval) is
+kept as its own, saved with every account it makes, and never replaced by another.
 
 Why a separate vault: creating items needs the token's `editor` role. Your Agent vault stays
 read-only (`viewer`) to the broker, so a compromised broker still can't change or delete the
@@ -22,7 +24,6 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
 from . import jsonfile
-from .browser_js import USERNAME_SELECTORS
 from .origin import host_of, origin_allowed
 from .vault import Login, PasswordRules, VaultError
 
@@ -145,15 +146,13 @@ def _title(site: str, bot: str, taken: set[str]) -> str:
 
 class AccountsMixin:
     _fresh: dict[tuple[str, str], float]
+    _alias_lock: asyncio.Lock
 
     def _accounts(self: "Broker") -> AccountSettings:
         return self.account_settings() if self.account_settings else AccountSettings()
 
-    async def create_login(
-        self: "Broker", client: str, username: str = "", email_alias: bool = False,
-        length: int = 20, symbols: bool = True, reason: str = "",
-    ) -> dict[str, Any]:
-        from .broker import BrokerError, plain
+    def _may_make(self: "Broker", client: str, what: str = "make accounts") -> tuple[AccountSettings, str, str]:
+        from .broker import BrokerError
 
         settings = self._accounts()
         if not settings.enabled:
@@ -161,16 +160,60 @@ class AccountsMixin:
         conn, _, bot = client.partition("/")
         if self.bots is not None and bot and not self.bots.access(bot).get("create_logins"):
             self.audit.record("not_permitted", client=client, kind="create_logins")
-            raise BrokerError(f"bot '{bot}' isn't allowed to make accounts; ask the user to allow it in Pass Broker")
+            raise BrokerError(f"bot '{bot}' isn't allowed to {what}; ask the user to allow it in Pass Broker")
+        return settings, conn, bot
+
+    def _bot_email(self: "Broker", bot: str) -> str:
+        return self.bots.email(bot) if self.bots is not None and bot else ""
+
+    async def _new_alias(self: "Broker", client: str, settings: AccountSettings, bot: str) -> str:
+        """Make the bot's alias and keep it as the bot's address (once: callers hold _alias_lock)."""
+        from .broker import BrokerError
+
+        try:
+            email = await asyncio.to_thread(self.backend.create_alias, settings.vault, _prefix(bot or "bot"),
+                                            f"pass-broker for {client}: the bot's own email alias")
+        except VaultError as e:
+            raise BrokerError(str(e)) from None
+        if self.bots is not None and bot:
+            await asyncio.to_thread(self.bots.set_email, bot, email)
+        self.audit.record("email_alias", client=client)
+        return email
+
+    async def email_address(self: "Broker", client: str, reason: str = "") -> dict[str, Any]:
+        """The bot's own email alias, made (with the user's approval) the first time it's asked for."""
+        from .broker import plain
+
+        settings, conn, bot = self._may_make(client, "have an email address")
+        async with self._alias_lock:
+            email = self._bot_email(bot)
+            if not email:
+                details = (f"A new hide-my-email alias, saved in your vault '{plain(settings.vault, 40)}'. Mail to it "
+                           "forwards to you; you can turn it off in Proton Pass at any time.\n"
+                           "It becomes this bot's address: every account it makes uses it, and it may give it out.\n")
+                placeholder = Login(f"new:alias:{client}", f"email alias for {bot or conn}", (), None, False)
+                await self._approve(client, placeholder, "email", "email_alias", "get its own email address", details, reason)
+                email = await self._new_alias(client, settings, bot)
+        return {"email": email, "note": "your own address: every account you make uses it, and codes sent to it can be "
+                                        "entered with fill_email_code"}
+
+    async def create_login(
+        self: "Broker", client: str, username: str = "", email_alias: bool = False,
+        length: int = 20, symbols: bool = True, reason: str = "",
+    ) -> dict[str, Any]:
+        from .broker import BrokerError, plain
+
+        settings, conn, bot = self._may_make(client)
         if self.bots is not None and bot and self.bots.created_today(bot) >= PER_BOT_PER_DAY:
             raise BrokerError(f"a bot may make at most {PER_BOT_PER_DAY} accounts a day; try again tomorrow")
         username = (username or "").strip()
         if username and (not USERNAME_RE.fullmatch(username) or self.redactor.contains_secret(username)):
             raise BrokerError("username: up to 64 letters, digits, dot, dash, underscore, plus or @")
-        if not (username or email_alias):
-            raise BrokerError("give a username, or set email_alias to sign up with a new email alias")
         if not (isinstance(length, int) and 12 <= length <= 64):
             raise BrokerError("password length: 12 to 64")
+        email = self._bot_email(bot)  # once a bot has its address, every account it makes uses it
+        if not (username or email or email_alias):
+            raise BrokerError("give a username, or set email_alias to sign up with your own email alias")
 
         s = await self.browser.session(client)
         url = s.page.url
@@ -182,76 +225,40 @@ class AccountsMixin:
             raise BrokerError("this page is blocked for your bot")
         existing = await asyncio.to_thread(self.backend.list_logins)
         title = _title(site, bot or conn, {l.title for l in existing})
-        email_note = "a new email alias (hide-my-email), forwarding to you" if email_alias else ""
+        make_alias = email_alias and not email
+        email_line = (f"Email: the bot's own alias {plain(email, 80)}\n" if email else
+                      "Email: a new email alias (hide-my-email), forwarding to you; it becomes this bot's address for "
+                      "every account it makes\n" if make_alias else "")
         details = (
             f"Site: {site}\n"
             f"Saved in your vault '{plain(settings.vault, 40)}' as '{plain(title, 80)}'\n"
             + (f"Username: {plain(username, 64)}\n" if username else "")
-            + (f"Email: {email_note}\n" if email_alias else "")
+            + email_line
             + f"Password: made by Proton Pass ({length} characters); the bot never sees it.\n"
             + "The bot may then fill in the sign-up form and later sign in with it, with your approval.\n"
         )
         placeholder = Login(f"new:{title}", title, (origin,), None, False)
         await self._approve(client, placeholder, site, "create_login", f"make an account on {site}", details, reason)
-        why = f"pass-broker for {client}: new account on {site}"
+        if make_alias:
+            async with self._alias_lock:
+                email = self._bot_email(bot) or await self._new_alias(client, settings, bot)
         try:
-            email = await asyncio.to_thread(self.backend.create_alias, settings.vault, _prefix(site), why) if email_alias else ""
             login = await asyncio.to_thread(
                 self.backend.create_login, settings.vault, title, origin, username, email,
-                PasswordRules(length, symbols), why,
+                PasswordRules(length, symbols), f"pass-broker for {client}: new account on {site}",
             )
         except VaultError as e:
             raise BrokerError(str(e)) from None
         if self.bots is not None and bot:
-            await asyncio.to_thread(self.bots.record_created, bot, title, site)
+            await asyncio.to_thread(self.bots.record_created, bot, title, site, username, email)
         self._login_sites = None  # the bot's site list now includes this site
         self._fresh[(client, login.handle)] = time.monotonic() + FRESH_S
-        self.audit.record("create_login", client=client, item=title, host=site, alias=email_alias)
+        self.audit.record("create_login", client=client, item=title, host=site, alias=bool(email))
         return {"status": "created", "handle": login.handle, "title": title, "site": site,
-                "next": "fill in the rest of the form yourself, then call fill_signup with this handle"}
-
-    async def fill_signup(self: "Broker", client: str, handle: str, reason: str = "") -> dict[str, Any]:
-        """The username or email if its field is empty, then every password field; then submit."""
-        from .broker import BrokerError
-        from .fills import MASK_JS, PASSWORD_SELECTORS, _find_in
-
-        login = self._login(client, handle)
-        verify = self._verifier(client, login)
-        s = await self.browser.session(client)
-        s.touch()
-        page = s.page
-        async with s.lock:
-            await s.check_tab()
-            try:
-                found = await s.find_many(PASSWORD_SELECTORS[0], minimum=1)
-                if found is None:
-                    raise BrokerError("no password field on this page; open the sign-up form first")
-                frame, fields = found
-                page = frame.page
-                verify(frame)
-                host = host_of(frame.url)
-                fresh = self._fresh.pop((client, login.handle), 0) > time.monotonic()
-                if not fresh:
-                    await self._approve(client, login, host, "signup", f"fill in a sign-up form on {host}", reason=reason)
-                user_field = await _find_in(frame, USERNAME_SELECTORS)
-                if user_field is not None and not await user_field.input_value():
-                    username = await self._username_value(client, login, host)
-                    if username:
-                        await user_field.evaluate(MASK_JS)
-                        await s.fill_pinned(frame, user_field, username, verify)
-                password = await self._secret(client, login, "password", f"sign up on {host}")
-                last = None
-                for i in range(min(await fields.count(), 3)):  # password, confirm (and a rare third)
-                    last = await s.fill_pinned(frame, fields.nth(i), password, verify)
-                del password
-                await s.submit(frame, last, verify)  # type: ignore[arg-type]
-            finally:
-                await s.clear_secrets(page)
-            self.audit.record("fill_signup", client=client, item=login.title, host=host_of(page.url))
-            return {"status": "submitted", "url": page.url, "title": await page.title()}
+                **({"username": username} if username else {}), **({"email": email} if email else {}),
+                "next": "fill in the other fields yourself (not the username, email or passwords), then call fill_signup with this handle"}
 
 
-def _prefix(site: str) -> str:
-    """`www.example.co.uk` -> `example`: the alias says which site it's for."""
-    labels = [x for x in site.split(".") if x not in ("www", "m", "app", "accounts", "signup")]
-    return re.sub(r"[^a-z0-9]", "", (labels[0] if labels else "site").lower())[:20] or "site"
+def _prefix(name: str) -> str:
+    """`mail-bot` -> `mailbot`: the alias says which bot it belongs to."""
+    return re.sub(r"[^a-z0-9]", "", name.lower())[:20] or "bot"

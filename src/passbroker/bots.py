@@ -9,7 +9,7 @@ one off by name without revoking the connection every bot shares.
 Each bot also has an access list: which logins, unlock actions, devices and
 keys it may use, and whether it may use email codes. A new bot starts with
 nothing (it can only browse in its own session) until you grant it more.
-It also says whether the bot may make its own accounts (accounts.py), whether it may see personal details on pages (masked by
+It also says whether the bot may make its own accounts (accounts.py; a bot that has made an email alias keeps it as its own address), whether it may see personal details on pages (masked by
 default, see pii.py) and, optionally, the only sites it may open.
 """
 
@@ -173,14 +173,34 @@ class Bots:
             entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
             entry["access"] = clean
 
-    def record_created(self, bot: str, title: str, site: str) -> None:
-        """A bot made a login: it may use it, and the account is listed under the bot."""
+    def record_created(self, bot: str, title: str, site: str, username: str = "", email: str = "") -> None:
+        """A bot made a login: it may use it, and the account is listed under the bot with the
+        username and email it was made with, which fill_signup puts in the sign-up form."""
         name = clean_bot(bot)
         with self._lock, self._edit() as data:
             entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
             acc = entry.setdefault("access", empty_access())
             acc["logins"] = sorted({*acc.get("logins", []), title})
-            entry.setdefault("created", []).append({"title": title, "site": site, "at": time.strftime("%Y-%m-%d %H:%M")})
+            made = {"title": title, "site": site, "at": time.strftime("%Y-%m-%d %H:%M")}
+            made |= {k: v for k, v in (("username", username), ("email", email)) if v}
+            entry.setdefault("created", []).append(made)
+
+    def created(self, bot: str, title: str) -> dict[str, Any] | None:
+        """The account this bot made under `title`, if it made one."""
+        made = self._read().get(clean_bot(bot), {}).get("created", [])
+        return next((c for c in reversed(made) if c.get("title") == title), None)
+
+    def email(self, bot: str) -> str:
+        """The bot's own email alias: made once, then used for every account it makes."""
+        return str(self._read().get(clean_bot(bot), {}).get("email", {}).get("address", ""))
+
+    def set_email(self, bot: str, address: str) -> None:
+        name = clean_bot(bot)
+        with self._lock, self._edit() as data:
+            entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
+            entry["email"] = {"address": address, "at": time.strftime("%Y-%m-%d %H:%M")} if address else {}
+            if not address:
+                entry.pop("email")
 
     def created_today(self, bot: str) -> int:
         today = time.strftime("%Y-%m-%d")

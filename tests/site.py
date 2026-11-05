@@ -85,6 +85,19 @@ SIGNUP = """<!doctype html><title>Create account</title><form method=post action
 <label>Email <input name=email type=email></label><label>Name <input name=name aria-label=name></label>
 <label>Password <input name=password type=password></label><label>Again <input name=confirm type=password></label>
 <button>Create account</button></form>"""
+# Every account field a sign-up form tends to ask for, plus ones only the bot fills.
+SIGNUP_FULL = """<!doctype html><title>Join</title><form method=post action=/signup-full>
+<label>First name <input name=first_name autocomplete=given-name></label>
+<label>Choose a username <input name=user_name autocomplete=username></label>
+<label>Email address <input name=email type=email></label><label>Confirm email <input name=email_confirm></label>
+<label>Phone <input name=phone type=tel></label><label>Display name <input name=display></label>
+<label>Password <input name=pw type=password autocomplete=new-password></label>
+<label>Repeat password <input name=pw2 type=password autocomplete=new-password></label>
+<label><input type=checkbox name=terms value=yes> I agree</label><button>Join</button></form>"""
+JOIN1 = """<!doctype html><title>Join</title><form method=post action=/join>
+<input name=address autocomplete=email placeholder="Your email"><button>Next</button></form>"""
+JOIN2 = """<!doctype html><title>Join</title><form method=post action=/join2>
+<input name=new type=password><input name=again type=password><button>Create</button></form>"""
 
 
 class Site:
@@ -126,6 +139,9 @@ class Site:
                     "/account": ACCOUNT.format(port=port),
                     "/shop": SHOP,
                     "/signup": SIGNUP,
+                    "/signup-full": SIGNUP_FULL,
+                    "/join": JOIN1,
+                    "/join2": JOIN2,
                     "/account/payments": "<!doctype html><title>Payments</title><p>Saved cards</p>",
                     "/framed": f'<!doctype html><title>Framed</title><iframe src="http://127.0.0.1:{port}/login" width=600 height=400></iframe>',
                 }
@@ -141,8 +157,10 @@ class Site:
                 if self.path == "/session":
                     ok = form.get("password") == [PASSWORD]
                     return self._redirect("/welcome") if ok else self._html(LOGIN.format(err="<p>Wrong password</p>"))
-                if self.path == "/signup":
+                if self.path in ("/signup", "/signup-full", "/join2"):
                     return self._redirect("/welcome")
+                if self.path == "/join":
+                    return self._redirect("/join2")
                 if self.path == "/step1":
                     return self._redirect("/step2")
                 if self.path == "/otp":

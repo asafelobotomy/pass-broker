@@ -109,8 +109,8 @@ async def test_email_code_is_read_and_filled_without_the_bot_seeing_it(setup, si
     broker, bots, handles, _ = setup
     seen = {}
 
-    def fake_fetch(settings, user, password, domains):
-        seen.update(user=user, password=password, domains=domains)
+    def fake_fetch(settings, user, password, domains, to=""):
+        seen.update(user=user, password=password, domains=domains, to=to)
         return TOTP
 
     broker.mail_fetch = fake_fetch
@@ -122,7 +122,7 @@ async def test_email_code_is_read_and_filled_without_the_bot_seeing_it(setup, si
     bots.set_access("mailbot", {"logins": ["Test Site"], "email_codes": True})
     result = await broker.fill_email_code(MAILBOT, handles["Test Site"])
     assert TOTP not in json.dumps(result) and site.posts[-1] == ("/otp", {"otp": [TOTP]})
-    assert seen == {"user": "me@proton.me", "password": "bridge-pw-1234", "domains": {"localhost"}}
+    assert seen == {"user": "me@proton.me", "password": "bridge-pw-1234", "domains": {"localhost"}, "to": ""}  # not a bot-made account
 
 
 def test_code_extraction():

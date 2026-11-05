@@ -93,7 +93,7 @@ async def test_full_sign_in_reveals_nothing(server):
         tools = {t.name for t in (await client.list_tools()).tools}
         assert tools == {"list_logins", "open_url", "snapshot", "click", "type_text", "press_key", "screenshot", "fill_login", "fill_totp", "list_unlockers", "list_locked_files", "unlock_file",
                          "fill_email_code", "end_session", "list_keys", "encrypt_text", "decrypt_text", "list_device_actions", "run_device_action",
-                         "create_login", "fill_signup"}
+                         "create_login", "fill_signup", "email_address"}
 
         result, dumped = await call("list_logins", bot=None)
         assert result.is_error  # `bot` is a required argument

@@ -113,6 +113,9 @@ export component AccountsSection inherits VerticalLayout {
     if Wiz.login-state != "" && !Wiz.acc-enabled: Muted { text: Wiz.login-state; font-size: 12px; wrap: word-wrap; }
     if Wiz.login-url != "" && !Wiz.acc-enabled: HorizontalLayout { alignment: start; Button { text: "Open sign-in page"; clicked => { Wiz.open-url(Wiz.login-url); } } }
     Muted { text: Wiz.acc-enabled ? "On. Bots you allow can make accounts here (at most 10 a day each)." : "Off."; font-size: 12px; }
+    if Wiz.acc-emails.length > 0: Section { text: "Bots' email addresses"; }
+    if Wiz.acc-emails.length > 0: Muted { text: "Each bot keeps the alias it was given and uses it for every account it makes. Turn one off in Proton Pass."; font-size: 12px; wrap: word-wrap; }
+    for row in Wiz.acc-emails: Muted { text: row; font-size: 12px; overflow: elide; }
     if Wiz.acc-created.length > 0: Section { text: "Accounts bots made"; }
     for row in Wiz.acc-created: Muted { text: row; font-size: 12px; overflow: elide; }
     Rectangle { vertical-stretch: 1; }

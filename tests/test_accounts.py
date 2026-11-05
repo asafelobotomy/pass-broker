@@ -61,7 +61,8 @@ async def test_make_an_account_and_sign_up_without_seeing_it(setup, site, tmp_pa
     assert password not in json.dumps(result) and result["url"].endswith("/welcome")
     path, form = site.posts[-1]
     assert path == "/signup" and form["password"] == [password] and form["confirm"] == [password]
-    assert form["email"][0].startswith("localhost.") and form["name"] == ["Maker Bot"]
+    assert form["email"] == [made["email"]] and made["email"].startswith("maker.") and form["name"] == ["Maker Bot"]
+    assert bots.email("maker") == made["email"]  # the bot's address from now on
     assert len(approver.asked) == 1  # approving the account covered its own sign-up form
     assert password not in (tmp_path / "audit.jsonl").read_text()
     assert [l["title"] for l in await broker.list_logins(BOT)] == ["localhost (maker)"]  # and only its own
@@ -117,9 +118,104 @@ async def test_denied_creates_nothing(setup, site):
     assert len(backend._items) == before and bots.created_today("maker") == 0
 
 
+async def test_every_account_field_is_filled_and_only_those(setup, site):
+    broker, backend, _, _, _ = setup
+    s = await broker.browser.session(BOT)
+    await s.navigate(site.url("/signup-full"))
+    made = await broker.create_login(BOT, username="maker1", email_alias=True)
+    for name, value in (("first_name", "Maker"), ("phone", "0123"), ("display", "Mr Maker")):
+        await s.page.fill(f"input[name={name}]", value)  # the bot's own fields
+    await s.page.check("input[name=terms]")
+    result = await broker.fill_signup(BOT, made["handle"])
+    password = backend._items[backend._index.ref[made["handle"]]]["password"]
+    assert password not in json.dumps(result) and result["left_empty"] == []
+    assert sorted(result["filled"]) == ["email", "email (confirm)", "password", "password (confirm)", "username"]
+    path, form = site.posts[-1]
+    assert path == "/signup-full" and form["user_name"] == ["maker1"]
+    assert form["email"] == form["email_confirm"] == [made["email"]] and form["pw"] == form["pw2"] == [password]
+    assert (form["first_name"], form["phone"], form["display"], form["terms"]) == (["Maker"], ["0123"], ["Mr Maker"], ["yes"])
+
+
+async def test_email_first_then_password_on_the_next_page(setup, site):
+    broker, backend, _, _, approver = setup
+    s = await broker.browser.session(BOT)
+    await s.navigate(site.url("/join"))
+    made = await broker.create_login(BOT, email_alias=True)
+    first = await broker.fill_signup(BOT, made["handle"])
+    assert first["status"] == "details_submitted" and first["filled"] == ["email"] and s.page.url.endswith("/join2")
+    assert site.posts[-1] == ("/join", {"address": [made["email"]]})
+    done = await broker.fill_signup(BOT, made["handle"])
+    password = backend._items[backend._index.ref[made["handle"]]]["password"]
+    assert done["status"] == "submitted" and site.posts[-1] == ("/join2", {"new": [password], "again": [password]})
+    assert len(approver.asked) == 1  # both pages covered by approving the account
+
+
+async def test_a_username_field_with_no_username_is_reported(setup, site):
+    broker, _, _, _, _ = setup
+    await (await broker.browser.session(BOT)).navigate(site.url("/signup-full"))
+    made = await broker.create_login(BOT, email_alias=True)
+    result = await broker.fill_signup(BOT, made["handle"])
+    assert result["left_empty"] == ["username"] and "create_login" in result["note"]
+    assert site.posts[-1][1].get("user_name") is None  # left empty, not filled with the address
+
+
+async def test_one_email_alias_per_bot_for_good(setup, site):
+    broker, backend, bots, _, approver = setup
+    made_aliases = []
+    real = backend.create_alias
+    backend.create_alias = lambda *a: made_aliases.append(real(*a)) or made_aliases[-1]
+    got = await broker.email_address(BOT, reason="newsletter")
+    assert got["email"] == bots.email("maker") and len(approver.asked) == 1
+    assert "every account it makes" in approver.asked[0][1]
+    assert (await broker.email_address(BOT))["email"] == got["email"] and len(approver.asked) == 1  # asked once only
+    s = await broker.browser.session(BOT)
+    for page in ("/signup", "/signup-full"):
+        await s.navigate(site.url(page))
+        made = await broker.create_login(BOT, username="maker1", email_alias=True)  # asking for a new one changes nothing
+        assert made["email"] == got["email"]
+        assert f"the bot's own alias {got['email']}" in approver.asked[-1][1]
+    assert made_aliases == [got["email"]]
+    assert [c.get("email") for c in bots.list()[0]["created"]] == [got["email"]] * 2
+
+
+async def test_two_requests_at_once_still_make_one_alias(setup, site):
+    import asyncio
+
+    broker, backend, bots, _, _ = setup
+    calls = []
+    real = backend.create_alias
+    backend.create_alias = lambda *a: calls.append(1) or real(*a)
+    a, b = await asyncio.gather(broker.email_address(BOT), broker.email_address(BOT))
+    assert a["email"] == b["email"] == bots.email("maker") and len(calls) == 1
+
+
+async def test_email_codes_for_a_bot_account_come_only_to_its_alias(setup, site):
+    from passbroker.mailcode import MailSettings
+
+    broker, _, bots, _, _ = setup
+    s = await broker.browser.session(BOT)
+    await s.navigate(site.url("/signup"))
+    made = await broker.create_login(BOT, email_alias=True)
+    bots.set_access("maker", {"create_logins": True, "email_codes": True, "logins": [made["title"]]})
+    broker.mail_path, broker.mail = None, MailSettings(item="Test Site")  # any item stands in for Bridge's
+    seen = {}
+    broker.mail_fetch = lambda settings, user, password, domains, to="": seen.update(to=to) or "482913"
+    await s.navigate(site.url("/otp"))
+    await broker.fill_email_code(BOT, made["handle"])
+    assert seen == {"to": made["email"]}
+
+
+async def test_email_address_needs_permission(setup):
+    broker, _, bots, settings, approver = setup
+    bots.set_access("maker", {"create_logins": False})
+    with pytest.raises(BrokerError, match="isn't allowed to have an email address"):
+        await broker.email_address(BOT)
+    assert approver.asked == [] and bots.email("maker") == ""
+
+
 def test_titles_never_collide():
     assert accounts._title("example.com", "maker", {"example.com (maker)", "example.com (maker) 2"}) == "example.com (maker) 3"
-    assert accounts._prefix("www.shop.example.co.uk") == "shop" and accounts._prefix("accounts.google.com") == "google"
+    assert accounts._prefix("mail-bot") == "mailbot" and accounts._prefix("..") == "bot"
 
 
 def test_proton_backend_never_handles_the_password(tmp_path):
@@ -192,3 +288,16 @@ echo '{"vaults": [{"name": "Bot Accounts"}]}'; exit 0
     with pytest.raises(OpError, match="none of your agents"):
         accounts.setup("Bot Accounts", "passbroker", "Agent", cli, sees=lambda v, c: False)
     assert not (tmp_path / "accounts.json").exists()
+
+
+def test_trashed_items_are_never_listed(tmp_path):
+    """A login you moved to the trash is out of every bot's reach."""
+    log = tmp_path / "calls"
+    cli = fake_tool(tmp_path, "pass-cli", f"""echo "$@" >> {log}
+case "$*" in
+  *"item list"*) echo '{{"items": [{{"id": "a1", "state": "Active", "title": "kept", "content": {{"urls": ["https://a.example"], "username": "u", "totp_uri": ""}}}}, {{"id": "t1", "state": "Trashed", "title": "binned", "content": {{"urls": ["https://b.example"], "username": "u", "totp_uri": ""}}}}]}}' ;;
+esac
+""")
+    backend = ProtonPassBackend("Agent", lambda: "x", Redactor(), pass_cli=cli, session_dir=tmp_path / "s")
+    assert [l.title for l in backend.list_logins()] == ["kept"]
+    assert "--filter-state active" in log.read_text()
