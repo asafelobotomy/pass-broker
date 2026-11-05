@@ -3263,6 +3263,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "image",
+ "ksni",
  "libc",
  "serde",
  "serde_json",

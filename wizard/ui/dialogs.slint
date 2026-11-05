@@ -1,0 +1,91 @@
+// The approval prompt (mirrors the desktop notification) and the Settings dialog.
+
+import { Button, ComboBox, Switch } from "std-widgets.slint";
+import { Theme, Muted, Heading, Section } from "theme.slint";
+import { Wiz } from "store.slint";
+
+// A bot is waiting for your Allow. The same request is in a desktop notification;
+// whichever you answer first counts, and the other disappears.
+export component ApprovalDialog inherits Rectangle {
+    background: #000a;
+    TouchArea { }
+    Rectangle {
+        width: 520px;
+        height: inner.preferred-height;
+        border-radius: 14px;
+        background: Theme.card;
+        border-width: 2px;
+        border-color: Theme.warn;
+        inner := VerticalLayout {
+            padding: 24px;
+            spacing: 12px;
+            Text { text: "Approval needed"; color: Theme.warn; font-weight: 700; font-size: 13px; }
+            Heading { text: Wiz.approval-title; font-size: 18px; wrap: word-wrap; }
+            Rectangle {
+                border-radius: 8px;
+                background: Theme.sidebar;
+                VerticalLayout {
+                    padding: 12px;
+                    Text { text: Wiz.approval-body; wrap: word-wrap; }
+                }
+            }
+            Muted {
+                text: "Denied automatically in " + Wiz.approval-seconds + " s." + (Wiz.approval-queue > 1 ? "  " + (Wiz.approval-queue - 1) + " more waiting." : "");
+                font-size: 12px;
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+                Button { text: "Deny"; clicked => { Wiz.approval-answer(false); } }
+                Button { text: "Allow"; primary: true; clicked => { Wiz.approval-answer(true); } }
+            }
+        }
+    }
+}
+
+export component SettingsDialog inherits Rectangle {
+    background: #0008;
+    TouchArea { }
+    Rectangle {
+        width: 560px;
+        height: inner.preferred-height;
+        border-radius: 14px;
+        background: Theme.card;
+        inner := VerticalLayout {
+            padding: 24px;
+            spacing: 12px;
+            Heading { text: "Settings"; font-size: 18px; }
+            Section { text: "Startup"; }
+            Switch { text: "Open Pass Broker when I log in"; checked <=> Wiz.pref-login; }
+            Switch { text: "Start the broker when Pass Broker opens"; checked <=> Wiz.pref-start-broker; }
+            Muted {
+                text: Wiz.service-mode ? "The background service already starts at login on its own." : "Only once setup is finished. With both on, the broker is ready whenever you're logged in.";
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            Rectangle { height: 1px; background: Theme.line; }
+            Section { text: "Window"; }
+            Switch { text: "Show an icon in the system tray"; checked <=> Wiz.pref-tray; }
+            Switch { text: "Keep running in the tray when the window is closed"; checked <=> Wiz.pref-close-to-tray; enabled: Wiz.pref-tray; }
+            Muted {
+                text: "Closing the window then keeps the broker running; choose Quit from the tray icon to stop everything. At login the app starts in the tray.";
+                font-size: 12px;
+                wrap: word-wrap;
+            }
+            Rectangle { height: 1px; background: Theme.line; }
+            Section { text: "Appearance"; }
+            HorizontalLayout {
+                spacing: 12px;
+                Text { text: "Theme"; vertical-alignment: center; color: Theme.muted; width: 80px; }
+                ComboBox { model: ["Follow the system", "Light", "Dark"]; current-index <=> Wiz.pref-theme; }
+            }
+            if Wiz.settings-note != "": Muted { text: Wiz.settings-note; font-size: 12px; color: Theme.bad; wrap: word-wrap; }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+                Button { text: "Cancel"; clicked => { Wiz.settings-open = false; } }
+                Button { text: "Save"; primary: true; clicked => { Wiz.save-settings(); } }
+            }
+        }
+    }
+}

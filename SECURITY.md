@@ -31,7 +31,7 @@ program can read your keyring and the broker's files directly.
 | Token stored in your system keyring, passed to `pass-cli` by environment, never argv | the token showing up in process lists or files |
 | Opaque, per-run handles | the model naming items or fields it wasn't shown |
 | Origin binding (page **and** frame must be HTTPS on a saved host) | prompt injection that fills your password on `evil.com` or in a cross-site iframe |
-| Desktop approval per bot, item, site and action, showing the bot's stated reason (one Allow lasts 2 minutes by default) | the assistant signing in anywhere you didn't ask for |
+| Desktop approval per bot, item, site and action, showing the bot's stated reason (one Allow lasts 2 minutes by default), in a notification and in the app; pending requests live in memory (`$XDG_RUNTIME_DIR`), readable only by you | the assistant signing in anywhere you didn't ask for |
 | Fill and submit in one step, then the field is cleared | the Secure Form problem where a filled password showed up in a page snapshot |
 | Pinned fills: the field is tagged with a random nonce, and the origin of the frame, every frame above it and the page is re-checked before and after each step | a page that navigates elsewhere while you're approving, which would otherwise receive the password |
 | Exact host matching (subdomains only with `--allow-subdomains`), default ports enforced | `evil.atlassian.net` matching a saved `atlassian.net` |
@@ -75,7 +75,7 @@ program can read your keyring and the broker's files directly.
   can) has its own way out; the list stops the broker's browser being that way.
 - **Decrypted text and returned unlock output go to the assistant** (and so to its provider) by
   design, when you approve it.
-- **Programs running as you** can read the agent token in your keyring, the broker's pass-cli
+- **Programs running as you** can answer an approval (as they could press a notification's button), read the agent token in your keyring, the broker's pass-cli
   session, kept browser sessions (`--keep-sessions`), and could rewrite the audit chain consistently.
 - **DNS can change between the broker's check and Chromium's own lookup.** The private-address guard
   resolves names itself and caches them for a minute, so a host that rebinds to a private address in

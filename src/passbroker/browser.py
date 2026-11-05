@@ -209,12 +209,18 @@ class Browser:
                     await self.end_session(key, "idle")
 
     async def stop(self) -> None:
+        """Close everything, step by step: Chromium may already be gone (killed with the
+        service, or crashed), and that mustn't stop the rest of the shutdown."""
         if self._idle_task:
             self._idle_task.cancel()
-        for s in list(self._sessions.values()):
-            await s.ctx.close()
+        closers = [s.ctx.close for s in self._sessions.values()]
         self._sessions.clear()
         if self._browser:
-            await self._browser.close()
+            closers.append(self._browser.close)
         if self._pw:
-            await self._pw.stop()
+            closers.append(self._pw.stop)
+        for close in closers:
+            try:
+                await close()
+            except Exception as e:
+                log.info("browser already closed: %s", type(e).__name__)

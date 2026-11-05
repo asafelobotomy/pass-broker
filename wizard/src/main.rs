@@ -2,13 +2,16 @@
 
 mod access_cb;
 mod api;
+mod approvals;
 mod broker_proc;
 mod extras_cb;
 mod live_cb;
+mod prefs;
 mod preview;
 mod setup_cb;
 mod state;
 mod svc_mode;
+mod tray;
 mod unlock_cb;
 mod view;
 
@@ -105,10 +108,20 @@ fn main() -> Result<(), slint::PlatformError> {
     preview::wire(&app, &ui);
     svc_mode::poll(&app, &ui);
     access_cb::wire_access(&app, &ui);
-    // a Funnel left on by a crash or reboot would expose whatever later listens on our port
+    approvals::wire(&ui);
+    prefs::wire(&app, &ui);
+    let minimized = std::env::args().any(|a| a == "--minimized");
+    let show_window = prefs::at_launch(&app, &ui, minimized);
+    // a Funnel left on by a crash or reboot would expose whatever later listens on our port;
+    // only then may the broker start (it may turn Funnel on itself)
     let port = app.state.lock().unwrap().settings.port.to_string();
-    let cli = app.cli.clone();
-    std::thread::spawn(move || { let _ = cli.call(&["funnel-cleanup".into(), "--port".into(), port], None); });
+    {
+        let (app, weak) = (app.clone(), ui.as_weak());
+        std::thread::spawn(move || {
+            let _ = app.cli.call(&["funnel-cleanup".into(), "--port".into(), port], None);
+            let _ = weak.upgrade_in_event_loop(move |ui| prefs::start_broker_if_wanted(&app, &ui));
+        });
+    }
 
     // poll connections and activity while they're on screen
     let timer = Timer::default();
@@ -135,14 +148,33 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // waiting approvals, shown as an Allow / Deny dialog
+    let approvals_timer = Timer::default();
+    {
+        let weak = ui.as_weak();
+        approvals_timer.start(TimerMode::Repeated, Duration::from_millis(500), move || {
+            if let Some(ui) = weak.upgrade() {
+                approvals::tick(&ui);
+            }
+        });
+    }
+
     ui.window().on_close_requested({
         let app = app.clone();
         move || {
-            broker_proc::stop_broker_blocking_app(&app);
+            // With the tray icon, closing only hides the window; the broker keeps running.
+            if !prefs::close_to_tray(&app) {
+                broker_proc::stop_broker_blocking_app(&app);
+                let _ = slint::quit_event_loop();
+            }
             slint::CloseRequestResponse::HideWindow
         }
     });
-    let r = ui.run();
+    if show_window {
+        ui.show()?;
+    }
+    let r = slint::run_event_loop_until_quit();
+    tray::stop();
     broker_proc::stop_broker_blocking_app(&app);
     r
 }

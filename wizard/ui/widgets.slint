@@ -147,7 +147,7 @@ export component BotLine inherits HorizontalLayout {
         alignment: center;
         horizontal-stretch: 1;
         Text { text: root.bot.name + (root.bot.enabled ? "" : "  · off"); font-weight: 600; color: root.bot.enabled ? Palette.foreground : Theme.muted; }
-        Muted { text: root.compact ? root.bot.last-seen : "via " + root.bot.via + " · last: " + root.bot.last-action + " · " + root.bot.last-seen; font-size: 12px; overflow: elide; }
+        Muted { text: root.compact ? root.bot.last-seen : "via " + root.bot.via + " · last: " + root.bot.last-action + " · " + root.bot.last-seen; font-size: 12px; wrap: no-wrap; overflow: elide; }
     }
     Button { text: "Access…"; clicked => { root.access(root.bot.name); } }
     if !root.compact: Button { text: "Forget"; clicked => { root.forget(root.bot.name); } }
@@ -155,7 +155,7 @@ export component BotLine inherits HorizontalLayout {
 
 export component LogView inherits Rectangle {
     in property <[string]> lines;
-    background: Palette.color-scheme == ColorScheme.dark ? #111114 : #f7f7f9;
+    background: Theme.dark ? #111114 : #f7f7f9;
     border-radius: 8px;
     border-width: 1px;
     border-color: Theme.line;

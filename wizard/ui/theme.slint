@@ -8,11 +8,14 @@ export global Theme {
     out property <color> ok: #2e9e5b;
     out property <color> bad: #d64545;
     out property <color> warn: #d08a1c;
-    out property <color> muted: Palette.color-scheme == ColorScheme.dark ? #a1a1aa : #6b6b76;
-    out property <color> card: Palette.color-scheme == ColorScheme.dark ? #1f1f24 : #ffffff;
-    out property <color> sidebar: Palette.color-scheme == ColorScheme.dark ? #17171b : #f1f1f4;
-    out property <color> hover: Palette.color-scheme == ColorScheme.dark ? #2a2a31 : #e6e6ec;
-    out property <color> line: Palette.color-scheme == ColorScheme.dark ? #33333b : #e2e2e8;
+    // From the colours the style actually uses, so "Follow the system" (an unknown
+    // scheme the style resolves itself) gets the matching card and sidebar colours.
+    out property <bool> dark: Palette.background.to-hsv().value < 0.5;
+    out property <color> muted: dark ? #a1a1aa : #6b6b76;
+    out property <color> card: dark ? #1f1f24 : #ffffff;
+    out property <color> sidebar: dark ? #17171b : #f1f1f4;
+    out property <color> hover: dark ? #2a2a31 : #e6e6ec;
+    out property <color> line: dark ? #33333b : #e2e2e8;
 }
 
 export component Muted inherits Text {

@@ -47,13 +47,24 @@ pub fn wire(app: &Shared, ui: &AppWindow) {
     });
 }
 
+fn public_host(app: &Shared) -> String {
+    let settings = app.state.lock().unwrap().settings.clone();
+    match settings.tunnel_mode {
+        0 => app.ts_host.lock().unwrap().clone(),
+        1 => settings.own_host,
+        _ => String::new(),
+    }
+}
+
+fn mcp_url(app: &Shared) -> String {
+    let public = public_host(app);
+    let port = app.state.lock().unwrap().settings.port;
+    if public.is_empty() { format!("http://127.0.0.1:{port}/mcp") } else { format!("https://{public}/mcp") }
+}
+
 pub fn start(app: &Shared, ui: &AppWindow) {
     let settings = app.state.lock().unwrap().settings.clone();
-    let public = match settings.tunnel_mode {
-        0 => app.ts_host.lock().unwrap().clone(),
-        1 => settings.own_host.clone(),
-        _ => String::new(),
-    };
+    let public = public_host(app);
     let mut cmd: Vec<String> = vec![
         "service-install".into(), "--port".into(), settings.port.to_string(), "--vault".into(), settings.vault.clone(),
         "--grant-minutes".into(), settings.grant_minutes.to_string(),
@@ -69,7 +80,7 @@ pub fn start(app: &Shared, ui: &AppWindow) {
     } else {
         cmd.push("--keep-sessions".into());
     }
-    let url = if public.is_empty() { format!("http://127.0.0.1:{}/mcp", settings.port) } else { format!("https://{public}/mcp") };
+    let url = mcp_url(app);
     wiz(ui).set_broker_state("starting".into());
     bg(app, ui, "Starting the background service…", move |app| {
         app.cli.call(&cmd, None)?;
@@ -121,6 +132,11 @@ pub fn poll(app: &Shared, ui: &AppWindow) {
                 toast(&ui, "The background service failed; see the log in the Control center.", true);
             }
             wiz(&ui).set_broker_state(shown.into());
+            if active && app2.journal.lock().unwrap().is_none() {
+                // reopened while the service runs: show its address and follow its log
+                wiz(&ui).set_broker_url(mcp_url(&app2).into());
+                follow_journal(&app2, &ui);
+            }
             crate::view::render_steps(&app2, &ui);
         });
     });
@@ -132,8 +148,20 @@ fn follow_journal(app: &Shared, ui: &AppWindow) {
     }
     let lines = Rc::new(VecModel::<SharedString>::default());
     wiz(ui).set_log_lines(slint::ModelRc::from(lines.clone()));
+    // Only this run of the service, not earlier (perhaps failed) starts.
+    let invocation = Command::new("systemctl")
+        .args(["--user", "show", "passbroker.service", "-p", "InvocationID", "--value"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    let mut filter = vec!["--user".to_string(), "-f".into(), "-n".into(), "200".into(), "-o".into(), "cat".into()];
+    if invocation.chars().all(|c| c.is_ascii_hexdigit()) && !invocation.is_empty() {
+        filter.extend([format!("_SYSTEMD_INVOCATION_ID={invocation}"), "+".into(), format!("USER_INVOCATION_ID={invocation}")]);
+    } else {
+        filter.extend(["-u".into(), "passbroker.service".into()]);
+    }
     let child = Command::new("journalctl")
-        .args(["--user", "-u", "passbroker.service", "-f", "-n", "50", "-o", "cat"])
+        .args(&filter)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

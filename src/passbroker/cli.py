@@ -164,8 +164,12 @@ def cmd_serve(args: argparse.Namespace) -> None:
             server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=args.port, log_config=None, access_log=False))
             await server.serve()
         finally:
-            await preview.stop()
-            await browser.stop()
+            # Each step runs even if one before it fails.
+            for stop in (preview.stop, browser.stop):
+                try:
+                    await stop()
+                except Exception as e:
+                    logging.getLogger("passbroker").warning("shutdown: %s", type(e).__name__)
             if args.manage_funnel:
                 # Funnel would otherwise stay on (and survive reboots) with nothing behind it.
                 subprocess.run(["tailscale", "funnel", "--https=443", "off"], capture_output=True, timeout=20)

@@ -11,6 +11,7 @@ import { Wiz, StepItem, CheckRow, LoginRow, ConnRow, AuditRow, BotRow, UnlockAct
 import { RequirementsPage, TokenPage, VaultPage } from "pages/setup.slint";
 import { AccessPage, UnlockPage } from "pages/access.slint";
 import { AssistantsPage, ControlPage } from "pages/assistants.slint";
+import { ApprovalDialog, SettingsDialog } from "dialogs.slint";
 
 export { Wiz, StepItem, CheckRow, LoginRow, ConnRow, AuditRow, BotRow, UnlockAction, KeyRow, DeviceRow, AccessItem, PreviewTab }
 
@@ -22,6 +23,11 @@ export component AppWindow inherits Window {
     min-width: 900px;
     min-height: 640px;
     background: Palette.background;
+
+    // 0 follows the system (the style resolves an unknown scheme itself), 1 light, 2 dark.
+    public function apply-theme(theme: int) {
+        Palette.color-scheme = theme == 1 ? ColorScheme.light : theme == 2 ? ColorScheme.dark : ColorScheme.unknown;
+    }
 
     HorizontalLayout {
         // ---- sidebar ---------------------------------------------------------------
@@ -55,6 +61,7 @@ export component AppWindow inherits Window {
                     clicked => { Wiz.go(6); }
                 }
                 Rectangle { vertical-stretch: 1; }
+                Button { text: "⚙  Settings"; clicked => { Wiz.open-settings(); } }
                 if Wiz.running: Rectangle {
                     height: 40px;
                     border-radius: 8px;
@@ -211,4 +218,8 @@ export component AppWindow inherits Window {
             }
         }
     }
+
+    if Wiz.settings-open: SettingsDialog { }
+    // last, so an approval shows above everything else
+    if Wiz.approval-id != "": ApprovalDialog { }
 }

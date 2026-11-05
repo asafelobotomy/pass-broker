@@ -117,6 +117,25 @@ export global Wiz {
     callback set-browser-window(bool);
     callback select-preview(string);
 
+    // an approval waiting for an answer (also shown as a notification)
+    in property <string> approval-id;
+    in property <string> approval-title;
+    in property <string> approval-body;
+    in property <int> approval-seconds;
+    in property <int> approval-queue;
+    callback approval-answer(bool);
+
+    // Settings dialog
+    in-out property <bool> settings-open;
+    in-out property <bool> pref-login;
+    in-out property <bool> pref-start-broker;
+    in-out property <bool> pref-tray;
+    in-out property <bool> pref-close-to-tray;
+    in-out property <int> pref-theme;
+    in property <string> settings-note;
+    callback open-settings;
+    callback save-settings;
+
     out property <bool> running: broker-state != "stopped";
     out property <bool> locked: steps.length > current && steps[current].state == 2;
 

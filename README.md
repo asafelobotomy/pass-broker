@@ -72,6 +72,16 @@ center is on screen, kept in memory (`$XDG_RUNTIME_DIR`, never your disk) where 
 them, and deleted when the session ends or the broker stops. Turn on **Own window** there (while the
 broker is stopped) if you'd rather have a real window, for example to solve a CAPTCHA yourself.
 
+**⚙ Settings** (bottom of the sidebar) holds app-wide preferences:
+
+- **Open Pass Broker when I log in** writes an autostart entry (`~/.config/autostart/pass-broker.desktop`).
+- **Start the broker when Pass Broker opens**, once setup is finished. With the line above, the
+  broker is ready whenever you're logged in. (The background service starts at login by itself.)
+- **Show an icon in the system tray**, and **keep running in the tray when the window is closed**:
+  closing the window then leaves the broker running, the icon brings the window back, and **Quit**
+  in its menu stops everything. At login the app then starts in the tray, without a window.
+- **Theme**: follow the system, light or dark.
+
 The wizard drives the broker through `passbroker api …`, a JSON interface, and never handles the
 Proton Pass token except to pipe a pasted one straight into the keyring. It finds `passbroker` on
 your PATH, or this project's `.venv`, or wherever `$PASSBROKER_CLI` points.
@@ -151,8 +161,10 @@ passbroker serve --public-host pass.example.com
 
 A Chromium window opens so you can watch what the assistant does. Add `--headless` to keep it
 off your desktop; the wizard then shows it live in its Control center instead.
-Approvals appear as desktop notifications with **Allow** and **Deny**. If nobody answers in 60
-seconds, it's denied. `--grant-minutes 0` asks every time.
+Approvals appear as desktop notifications with **Allow** and **Deny**, and, while the app is
+open, as a dialog in the app with the same buttons. Whichever you answer first counts and the
+other disappears. If nobody answers in 60 seconds, it's denied. `--grant-minutes 0` asks every
+time.
 
 ### 5. Expose it to Grok with Tailscale Funnel
 

@@ -63,9 +63,26 @@ impl Default for Settings {
     }
 }
 
+/// App-wide preferences from the Settings dialog.
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[serde(default)]
+pub struct AppPrefs {
+    /// Open the app when you log in (an XDG autostart entry).
+    pub launch_at_login: bool,
+    /// Start the broker as soon as the app opens (setup must be finished).
+    pub start_broker: bool,
+    /// Show an icon in the system tray.
+    pub tray: bool,
+    /// Closing the window keeps the app (and broker) running in the tray.
+    pub close_to_tray: bool,
+    /// 0 follow the system, 1 light, 2 dark.
+    pub theme: i32,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 #[serde(default)]
 pub struct WizardState {
+    pub prefs: AppPrefs,
     pub version: u32,
     pub steps: Vec<StepState>,
     pub settings: Settings,

@@ -24,8 +24,28 @@ UNIT = "passbroker.service"
 
 
 def unit_path() -> Path:
-    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    """Where systemd's user manager looks for units: its own XDG_CONFIG_HOME, not ours."""
+    base = Path.home() / ".config"
+    try:
+        env = subprocess.run(["systemctl", "--user", "show-environment"], capture_output=True, text=True, timeout=10).stdout
+        for line in env.splitlines():
+            if line.startswith("XDG_CONFIG_HOME="):
+                base = Path(line.split("=", 1)[1])
+    except (OSError, subprocess.TimeoutExpired):
+        pass
     return base / "systemd" / "user" / UNIT
+
+
+def _environment() -> str:
+    """Pass on custom XDG folders, so the service uses the same config, data and state as the wizard."""
+    lines = []
+    for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+        value = os.environ.get(key)
+        if value:
+            if any(c in value for c in '"\\\n%$'):
+                raise ValueError(f"{key} contains characters a unit file can't hold")
+            lines.append(f'Environment="{key}={value}"\n')
+    return "".join(lines)
 
 
 def _writable_dirs(config: Path, data: Path, state: Path) -> list[Path]:
@@ -49,7 +69,9 @@ def render(serve_args: list[str], config: Path, data: Path, state: Path, port: i
         raise ValueError("test-only switches can't go into a service")
     exec_start = shlex.join([sys.executable, "-m", "passbroker.cli", "serve", *serve_args])
     tailscale = shutil.which("tailscale") or "/usr/bin/tailscale"
-    rw = " ".join(shlex.quote(str(d)) for d in _writable_dirs(config, data, state))
+    # "-": a folder missing inside the sandbox (one under /tmp, which PrivateTmp replaces) is
+    # skipped instead of stopping the service from starting at all.
+    rw = " ".join(shlex.quote(f"-{d}") for d in _writable_dirs(config, data, state))
     funnel_lines = (
         f"ExecStartPre={shlex.join([tailscale, 'funnel', '--bg', '--https=443', f'http://127.0.0.1:{port}'])}\n"
         f"ExecStopPost=-{shlex.join([tailscale, 'funnel', '--https=443', 'off'])}\n"
@@ -62,9 +84,13 @@ After=graphical-session.target network-online.target
 
 [Service]
 Type=simple
-{funnel_lines}ExecStart={exec_start}
+{_environment()}{funnel_lines}ExecStart={exec_start}
 Restart=on-failure
 RestartSec=5
+# Stop signals go to the broker only, so it can close Chromium and clean up itself;
+# whatever is left afterwards is killed.
+KillMode=mixed
+TimeoutStopSec=30
 UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
