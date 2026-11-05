@@ -29,9 +29,13 @@ the threat model, what protects what, what it can't stop, and how to report a vu
 ## Requirements
 
 - Linux with a desktop that shows notifications (`notify-send`; KDE Plasma and GNOME both work).
-- Python 3.11 or newer and [uv](https://docs.astral.sh/uv/); Rust 1.85 or newer to build the wizard.
+- Python 3.11 or newer and [uv](https://docs.astral.sh/uv/); Rust 1.92 or newer to build the wizard.
 - [Proton Pass CLI](https://protonpass.github.io/pass-cli/) (`pass-cli`), and Chromium for the
   broker's browser (`uv run playwright install chromium`; the wizard can do this for you).
+- Unprivileged user namespaces, for the browser's sandbox (on by default almost everywhere; on
+  Ubuntu 23.10 and later, AppArmor blocks them: `sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0`).
+  The broker won't start its browser without that sandbox unless you set `PASSBROKER_ALLOW_UNSANDBOXED=1`.
+- Recommended: `bubblewrap` (`bwrap`), which boxes the browser off from your files and desktop session.
 - Optional, per feature: Tailscale (Funnel), `gpg`, `openssl`, `7z` (7-Zip 21 or newer) and
   `keepassxc-cli` (file unlocking), Proton Mail Bridge (email codes), `ssh` (device actions),
   systemd (background service).
@@ -83,6 +87,12 @@ step that depends on one you change, such as the vault check after a new token, 
 again. Setup can't be unlocked while the broker runs. The **Control center** starts and stops the
 broker and Funnel, lists connected apps, and shows activity. **Revoke** and **Emergency stop** are
 never locked.
+
+The broker's browser is locked down: it only ever shows web pages (never `chrome://` settings,
+flags, `file://` or other programs' links), refuses every permission a page asks for, dismisses
+dialogs and file pickers, accepts only plain key presses from bots (no Control, Alt or Super
+shortcuts), runs with Chromium's sandbox, and, with bubblewrap installed, inside a box that hides
+your files and desktop session from it.
 
 The broker's browser runs **hidden**, so it never pops up over what you're doing. The Control
 center shows each bot's tab live instead, about once a second, view-only. These pictures are

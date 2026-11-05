@@ -34,6 +34,33 @@ class BrowserError(Exception):
     pass
 
 
+# Keys a bot may press: enough to fill in and move through a page. No Control, Alt or Meta, so no
+# browser or desktop shortcuts, and no Ctrl+V pasting your clipboard into a page.
+NAMED_KEYS = {"Enter", "Tab", "Escape", "Backspace", "Delete", "Space", "Home", "End", "PageUp", "PageDown",
+              "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Insert"}
+
+
+def key_allowed(key: str) -> bool:
+    if key in ("+", " "):
+        return True
+    *mods, base = key.split("+")
+    return all(m == "Shift" for m in mods) and (base in NAMED_KEYS or (len(base) == 1 and base.isprintable()))
+
+
+def _not_a_web_page(url: str) -> str | None:
+    """Only web pages may be shown: never chrome://, file://, view-source:, devtools:// and the like."""
+    if url == "about:blank" or urlsplit(url).scheme in ("http", "https"):
+        return None
+    return "only web pages (http or https) can be opened"
+
+
+def _contain(page: Page) -> None:
+    """Dialogs (alert, confirm, prompt, leave-page) are dismissed, so none can stall a bot or wait on
+    your screen; file pickers are swallowed, so no page can offer up your files."""
+    page.on("dialog", lambda d: asyncio.ensure_future(d.dismiss()))
+    page.on("filechooser", lambda chooser: None)
+
+
 class Session:
     def __init__(
         self,
@@ -56,10 +83,12 @@ class Session:
         ctx.on("page", self._on_page)
 
     def _on_page(self, page: Page) -> None:
+        _contain(page)
         self._page = page
 
     async def open(self) -> None:
         self._page = self.ctx.pages[0] if self.ctx.pages else await self.ctx.new_page()
+        _contain(self._page)
 
     def touch(self) -> None:
         self.last_use = time.monotonic()
@@ -117,16 +146,16 @@ class Session:
     async def check_tab(self) -> None:
         """Leave a page the bot may not see. Sites that change pages without loading one
         (single-page apps) slip past the request guard; this catches them on the next look."""
-        if not self._refusal:
-            return
-        why = await self._refusal(self.page.url)
+        why = _not_a_web_page(self.page.url)
+        if not why and self._refusal:
+            why = await self._refusal(self.page.url)
         if not why:
             return
         try:
             await self.page.go_back(wait_until="domcontentloaded", timeout=8000)
         except Exception:
             pass
-        if await self._refusal(self.page.url):
+        if _not_a_web_page(self.page.url) or (self._refusal and await self._refusal(self.page.url)):
             await self.page.goto("about:blank")
         raise BrowserError(f"not allowed: {why}; went back to the previous page")
 
@@ -182,6 +211,9 @@ class Session:
         return self._outcome({"url": self.page.url})
 
     async def press(self, key: str) -> dict[str, Any]:
+        if not key_allowed(key):
+            raise BrowserError("refused: only plain keys (letters, Enter, Tab, Escape, arrows, Backspace...), with Shift at "
+                               "most; shortcuts with Control, Alt or Meta aren't allowed")
         self.touch()
         self.refused = None
         await self.page.keyboard.press(key)

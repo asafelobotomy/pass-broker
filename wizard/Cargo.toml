@@ -1,8 +1,8 @@
 [package]
 name = "passbroker-wizard"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.92"
 license = "MIT"
 description = "Setup wizard and control center for Pass Broker"
 repository = "https://github.com/asafelobotomy/pass-broker"

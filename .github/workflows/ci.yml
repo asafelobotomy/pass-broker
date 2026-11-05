@@ -28,8 +28,10 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: ${{ matrix.python }}
-      - name: Tools the unlock tests use
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gnupg p7zip-full openssl
+      - name: Tools the unlock tests use, and bubblewrap for the browser's box
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gnupg p7zip-full openssl bubblewrap
+      - name: Let the browser's sandbox run (Ubuntu's AppArmor blocks unprivileged user namespaces)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install
         run: uv sync --locked --python ${{ matrix.python }}
       - name: Chromium for the browser tests

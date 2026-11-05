@@ -115,10 +115,11 @@ ReadWritePaths={rw}
 # $XDG_RUNTIME_DIR/passbroker: the Control center's live browser view (memory only, removed on stop).
 RuntimeDirectory=passbroker
 RuntimeDirectoryMode=0700
-ProtectKernelTunables=yes
+# Not ProtectKernelTunables or RestrictSUIDSGID: they stop bubblewrap building the browser's box
+# (its own /proc, and the mount calls it uses), which protects far more. An unprivileged
+# service can't change kernel settings anyway, and NoNewPrivileges makes setuid files useless.
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-RestrictSUIDSGID=yes
 RestrictRealtime=yes
 LockPersonality=yes
 SystemCallArchitectures=native

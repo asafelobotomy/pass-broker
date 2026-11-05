@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from . import confine
 from .tailscale import (  # noqa: F401  (re-exported for api and tests)
     FUNNEL_OPERATOR_FIX,
     TailscaleState,
@@ -330,6 +331,8 @@ def environment_checks(pass_cli: str = "pass-cli", browser_check: Callable[[], b
             required=False,
         ),
         Check("tailscale", "Tailscale (for Funnel)", ts.running, ts.detail, required=False),
+        Check("sandbox", "Browser sandbox", *confine.sandbox_status()),
+        Check("confine", "Browser confinement", *confine.confinement_status(), required=False),
     ]
 
 

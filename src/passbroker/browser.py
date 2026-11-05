@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 import re
+import shutil
 import socket
 import time
 from collections.abc import Awaitable, Callable
@@ -28,6 +29,7 @@ from urllib.parse import urlsplit
 from playwright.async_api import Browser as PWBrowser
 from playwright.async_api import Route, WebSocketRoute, async_playwright
 
+from . import confine
 from .browser_js import OTP_SELECTORS, USERNAME_SELECTORS  # noqa: F401  (re-exported for the broker)
 from .netguard import BLOCKED_SUFFIXES, _private
 from .netproxy import GuardProxy
@@ -36,6 +38,14 @@ from .session import BrowserError, Session  # noqa: F401
 
 CHROMIUM_ARGS = [
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",  # no LAN addresses via WebRTC
+    # Nothing a page asks for is granted: camera, microphone, location, notifications, clipboard,
+    # USB/serial/HID/Bluetooth device pickers... are refused without a prompt.
+    "--deny-permission-prompts",
+    "--disable-notifications",
+    "--disable-file-system",  # no FileSystem API storage
+    "--disable-speech-api",
+    "--disable-print-preview",
+    "--no-pings",
     "--disable-save-password-bubble",
     "--password-store=basic",
     "--disable-features=PasswordManagerOnboarding,AutofillServerCommunication,AutofillEnableAccountWalletStorage",
@@ -57,6 +67,7 @@ def drop_debug_env() -> list[str]:
         del os.environ[k]
     return sorted(gone)
 MAX_SESSIONS = 12
+ALLOW_UNSANDBOXED = "PASSBROKER_ALLOW_UNSANDBOXED"
 
 
 async def _no_refusal(key: str, url: str, top: bool = True) -> str | None:
@@ -79,7 +90,8 @@ class Browser:
         self._keep = keep_sessions
         self._idle_s = idle_minutes * 60
         self._allow_private = allow_private
-        self._sandbox = True
+        self._confine: Path | None = None  # the bubblewrap launcher, when used
+        self.isolation = ""  # "confined", "sandboxed" or "none", once started
         self._pw = None
         self._browser: PWBrowser | None = None
         self._sessions: dict[str, Session] = {}
@@ -108,22 +120,45 @@ class Browser:
             log.warning("ignored debugging variables that could log secrets: %s", ", ".join(gone))
         await self.proxy.start()
         self._pw = await async_playwright().start()
+        # A window needs the desktop's display socket, which the box leaves out on purpose.
+        if self._headless and confine.available():
+            self._confine = confine.wrapper(self._pw.chromium.executable_path, confine.private_folder())
         if not self._keep:
             self._browser = await self._sandboxed(lambda opts: self._pw.chromium.launch(**opts))
         if self._idle_s > 0 and not self._keep:
             self._idle_task = asyncio.create_task(self._idle_watch())
 
     async def _sandboxed(self, launch: Callable[[dict[str, object]], Awaitable[Any]]) -> Any:
-        """Launch with Chromium's own sandbox (Playwright turns it off by default), which walls
-        each page's renderer off from your files and processes. It needs unprivileged user
-        namespaces; where the system forbids them, fall back rather than not start at all."""
-        if self._sandbox:
+        """Launch isolated as far as this system allows, never less than Chromium's own sandbox.
+
+        1. In a bubblewrap box (confine.py) with Chromium's sandbox: a taken-over browser still
+           can't touch your files or desktop session.
+        2. Chromium's sandbox alone (Playwright turns it off by default): each page's renderer is
+           walled off from your files and processes.
+        Without either the broker refuses to start, unless PASSBROKER_ALLOW_UNSANDBOXED=1.
+        """
+        tries: list[tuple[str, dict[str, object]]] = []
+        if self._confine is not None:
+            tries.append(("confined", {"executable_path": str(self._confine), "chromium_sandbox": True}))
+        tries.append(("sandboxed", {"chromium_sandbox": True}))
+        problem = ""
+        for level, extra in tries:
+            opts = {**self._launch_opts(), **extra}
+            if "executable_path" in extra:
+                opts.pop("channel", None)  # the box runs that same full Chromium
             try:
-                return await launch({**self._launch_opts(), "chromium_sandbox": True})
+                launched = await launch(opts)
+                self.isolation = level
+                return launched
             except Exception as e:
-                self._sandbox = False
-                log.warning("Chromium's sandbox isn't available here (%s); running without it", str(e).splitlines()[0][:120])
-        return await launch(self._launch_opts())
+                problem = str(e).splitlines()[0][:160]
+                log.warning("browser isolation %r unavailable here: %s", level, problem)
+        if os.environ.get(ALLOW_UNSANDBOXED) == "1":
+            log.warning("running the browser WITHOUT its sandbox (%s=1)", ALLOW_UNSANDBOXED)
+            self.isolation = "none"
+            return await launch(self._launch_opts())
+        raise BrowserError(f"Chromium's sandbox can't start on this system ({problem}). It needs unprivileged user "
+                           f"namespaces; see the README. To run without it anyway (not recommended): {ALLOW_UNSANDBOXED}=1")
 
     def _launch_opts(self) -> dict[str, object]:
         # channel="chromium" picks full Chromium's new headless mode over the
@@ -246,6 +281,8 @@ class Browser:
         if self._pw:
             closers.append(self._pw.stop)
         closers.append(self.proxy.stop)
+        if self._confine is not None:
+            shutil.rmtree(self._confine.parent, ignore_errors=True)
         for close in closers:
             try:
                 await close()
