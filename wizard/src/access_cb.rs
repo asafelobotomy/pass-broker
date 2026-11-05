@@ -44,6 +44,7 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
                 let g = wiz(ui);
                 g.set_access_email(current["email_codes"].as_bool().unwrap_or(false));
                 g.set_access_create(current["create_logins"].as_bool().unwrap_or(false));
+                g.set_access_mail(current["manages_mail"].as_bool().unwrap_or(false));
                 g.set_acc_enabled(cfg["accounts"]["enabled"].as_bool().unwrap_or(false));
                 if !s(&cfg["accounts"]["vault"]).is_empty() {
                     g.set_acc_vault(s(&cfg["accounts"]["vault"]).into());
@@ -85,7 +86,7 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
             let g = wiz(&ui);
             let bot = g.get_access_bot().to_string();
             let mut access = json!({
-                "logins": [], "unlock": [], "keys": [], "devices": [], "email_codes": g.get_access_email(), "create_logins": g.get_access_create(),
+                "logins": [], "unlock": [], "keys": [], "devices": [], "email_codes": g.get_access_email(), "create_logins": g.get_access_create(), "manages_mail": g.get_access_mail(),
                 "personal_details": g.get_access_personal(), "sites_limited": g.get_access_sites_limited(),
                 "sites": g.get_access_sites().as_str(),
                 "blocked_pages": g.get_access_blocked().as_str(),

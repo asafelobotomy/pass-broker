@@ -9,8 +9,10 @@ one off by name without revoking the connection every bot shares.
 Each bot also has an access list: which logins, unlock actions, devices and
 keys it may use, and whether it may use email codes. A new bot starts with
 nothing (it can only browse in its own session) until you grant it more.
-It also says whether the bot may make its own accounts (accounts.py; a bot that has made an email alias keeps it as its own address), whether it may see personal details on pages (masked by
-default, see pii.py) and, optionally, the only sites it may open.
+It also says whether the bot manages your mail with access of its own (then it's the one asked
+to add the bot-mail rule, botmail.py), whether it may make its own accounts (accounts.py; a bot
+that has made an email alias keeps it as its own address), whether it may see personal details on
+pages (masked by default, see pii.py) and, optionally, the only sites it may open.
 """
 
 from __future__ import annotations
@@ -34,7 +36,7 @@ MAX_SITES = 100
 
 def empty_access() -> dict[str, Any]:
     return {
-        "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False, "create_logins": False,
+        "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False, "create_logins": False, "manages_mail": False,
         "personal_details": False, "sites_limited": False, "sites": [], "blocked_pages": [],
     }
 
@@ -160,6 +162,7 @@ class Bots:
             clean[kind] = sorted({str(x)[:120] for x in items if str(x).strip()})
         clean["email_codes"] = bool(access.get("email_codes", False))
         clean["create_logins"] = bool(access.get("create_logins", False))
+        clean["manages_mail"] = bool(access.get("manages_mail", False))  # has its own access to your mail
         clean["personal_details"] = bool(access.get("personal_details", False))
         clean["sites_limited"] = bool(access.get("sites_limited", False))
         sites, pages = _list(access.get("sites")), _list(access.get("blocked_pages"))

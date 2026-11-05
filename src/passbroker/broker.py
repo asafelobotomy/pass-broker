@@ -10,11 +10,13 @@ from __future__ import annotations
 import asyncio
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from .accounts import AccountSettings, AccountsMixin
 from .approvals import Approver, GrantCache
 from .audit import AuditLog
+from .botmail import BotMailMixin
 from .bots import Bots
 from .browser import Browser
 from .devices import DevicesMixin, DeviceStore
@@ -40,7 +42,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, AccountsMixin, SignupMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -75,6 +77,7 @@ class Broker(FillsMixin, AccountsMixin, SignupMixin, FilesMixin, DevicesMixin, M
         self.mail = mail
         self.account_settings = account_settings  # re-read on use: set up without a restart
         self._fresh: dict[tuple[str, str], float] = {}
+        self.accounts_path: Path | None = None  # where the bot-mail rule's state is saved (botmail.py)
         self._alias_lock = asyncio.Lock()  # one email alias per bot, even when two calls race
         if browser is not None:
             browser.page_refusal = self.page_refusal

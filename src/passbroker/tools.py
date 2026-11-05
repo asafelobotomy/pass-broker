@@ -171,6 +171,18 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
             client = await who(ctx, bot, "email address")
             return safe(await broker.email_address(client, reason))
 
+    @mcp.tool(description="For a bot that manages the user's mail with its own access (the user marks it so in Pass Broker): "
+              "anything to set up in their mail for the other bots, such as one rule filing all bots' mail into a folder. "
+              "Do it with your own mail access, then report it done. " + BOT)
+    async def mail_tasks(ctx: Context, bot: str) -> dict[str, Any]:
+        with errors():
+            return safe(await broker.mail_tasks(await who(ctx, bot, "mail tasks")))
+
+    @mcp.tool(description="Report that you set up the bot-mail rule from mail_tasks in the user's mail. " + BOT)
+    async def mail_rule_done(ctx: Context, bot: str) -> dict[str, Any]:
+        with errors():
+            return safe(await broker.mail_rule_done(await who(ctx, bot, "mail rule done")))
+
     @mcp.tool(description="Make a new account login for the site of the current page (open its sign-up page first). The user approves; "
               "Proton Pass generates the password and saves it in the user's vault. You get a handle, never the password. If the form "
               "asks for a username, give one. Your email address (see email_address) is saved with every account you make; "

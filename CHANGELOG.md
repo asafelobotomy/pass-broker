@@ -9,6 +9,11 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
 - **Each bot has one email address**: the first alias a bot gets (new `email_address` tool, or
   `create_login` with `email_alias`) stays its own, is saved with every account it makes and is
   listed in the wizard. Email codes for those accounts come only from mail sent to that alias.
+- **All bot mail in one folder**: bot aliases are named `bot-<name>…`, so one Proton Mail rule
+  files every bot's mail into a **Bots** folder. A bot you mark as managing your mail is given the
+  job (new `mail_tasks` and `mail_rule_done` tools); with none, the bot tells you, and the wizard's
+  **Set up bot mail** makes the folder, copies the rule and opens Proton Mail's filters.
+- Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email
   first and the password on a later page. It says what it filled and what it couldn't.

@@ -2,7 +2,7 @@
 
 The broker logs in to Bridge's local IMAP server with credentials from a vault
 item, finds the newest message from the site's domain received in the last few
-minutes, takes the code out of it and types it into the page. Bots never see
+minutes (in any folder: your filters may file it anywhere), takes the code out of it and types it into the page. Bots never see
 the code or the mail; they only learn whether it was submitted. Messages are
 read with BODY.PEEK, so they stay unread.
 
@@ -118,6 +118,34 @@ def _sent_to(msg: email.message.Message, address: str) -> bool:
     return address.lower() in {a.lower() for _, a in getaddresses(headers)}
 
 
+SKIP_FOLDERS = {"trash", "spam", "drafts", "sent", "outbox", "scheduled", "starred"}
+
+
+def _quote(folder: str) -> str:
+    return '"' + folder.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _folders(imap: imaplib.IMAP4, configured: str) -> list[str]:
+    """Where a code may be: your filters can file mail (an alias's, say) anywhere. Bridge's All Mail
+    if it has one, else every folder but trash, spam, drafts and sent; a folder you set, only that."""
+    if configured.upper() != "INBOX":
+        return [configured]
+    try:
+        typ, listed = imap.list()
+    except imaplib.IMAP4.error:
+        return ["INBOX"]
+    names = []
+    for raw in listed if typ == "OK" else []:
+        m = re.search(rb'\) (?:"[^"]*"|NIL) (.+)$', raw if isinstance(raw, bytes) else b"")
+        if m:
+            names.append(m.group(1).decode(errors="replace").strip().strip('"'))
+    if "All Mail" in names:
+        return ["All Mail"]
+    rest = [n for n in names if n.upper() != "INBOX" and n.rsplit("/", 1)[-1].lower() not in SKIP_FOLDERS
+            and n != "Labels" and not n.startswith("Labels/")]  # labels repeat mail found elsewhere
+    return ["INBOX", *rest]
+
+
 def fetch_code(settings: MailSettings, user: str, password: str, domains: set[str], now: float | None = None,
                to: str = "") -> str | None:
     """Newest code from a sender in `domains` within the age limit (and sent to `to`, if given), or None."""
@@ -134,28 +162,33 @@ def fetch_code(settings: MailSettings, user: str, password: str, domains: set[st
     try:
         imap.starttls(ssl_context=ctx)
         imap.login(user, password)
-        imap.select(settings.folder, readonly=True)
         since = time.strftime("%d-%b-%Y", time.gmtime(now - 86400))
-        _, data = imap.search(None, "SINCE", since)
-        ids = (data[0] or b"").split()[-30:]
-        for msg_id in reversed(ids):
-            _, parts = imap.fetch(msg_id, "(BODY.PEEK[])")
-            raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
-            msg = email.message_from_bytes(raw)
-            sender = parseaddr(msg.get("From", ""))[1].lower()
-            sender_domain = sender.rpartition("@")[2]
-            if not any(sender_domain == d or sender_domain.endswith("." + d) for d in domains):
+        newest: tuple[float, str, bytes] | None = None  # (sent, folder, id)
+        for folder in _folders(imap, settings.folder):
+            if imap.select(_quote(folder), readonly=True)[0] != "OK":
                 continue
-            if to and not _sent_to(msg, to):
-                continue
-            try:
-                sent = parsedate_to_datetime(msg.get("Date")).timestamp()
-            except (TypeError, ValueError):
-                continue
-            if now - sent > settings.max_age_minutes * 60:
-                return None  # newest matching message is too old
-            return extract_code(str(msg.get("Subject", "")), _text_of(msg))
-        return None
+            _, data = imap.search(None, "SINCE", since)
+            for msg_id in reversed((data[0] or b"").split()[-30:]):
+                _, parts = imap.fetch(msg_id, "(BODY.PEEK[HEADER])")
+                msg = email.message_from_bytes(next((p[1] for p in parts if isinstance(p, tuple)), b""))
+                sender_domain = parseaddr(msg.get("From", ""))[1].lower().rpartition("@")[2]
+                if not any(sender_domain == d or sender_domain.endswith("." + d) for d in domains):
+                    continue
+                if to and not _sent_to(msg, to):
+                    continue
+                try:
+                    sent = parsedate_to_datetime(msg.get("Date")).timestamp()
+                except (TypeError, ValueError):
+                    continue
+                if newest is None or sent > newest[0]:
+                    newest = (sent, folder, msg_id)
+                break  # newer ones in this folder came first
+        if newest is None or now - newest[0] > settings.max_age_minutes * 60:
+            return None  # nothing, or the newest matching message is too old
+        imap.select(_quote(newest[1]), readonly=True)
+        _, parts = imap.fetch(newest[2], "(BODY.PEEK[])")
+        msg = email.message_from_bytes(next((p[1] for p in parts if isinstance(p, tuple)), b""))
+        return extract_code(str(msg.get("Subject", "")), _text_of(msg))
     finally:
         try:
             imap.logout()

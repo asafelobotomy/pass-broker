@@ -36,7 +36,8 @@ class FakeBridge:
     def __init__(self, key, cert, messages=MESSAGES, password="bridge-pass"):
         self.ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.ctx.load_cert_chain(cert, key)
-        self.messages, self.password = messages, password
+        self.folders = messages if isinstance(messages, dict) else {"INBOX": messages}  # folder -> messages
+        self.messages, self.password = self.folders.get("INBOX", []), password
         self.sock = socket.create_server(("127.0.0.1", 0))
         self.port = self.sock.getsockname()[1]
         self.logins: list[str] = []
@@ -61,7 +62,7 @@ class FakeBridge:
                 arg = rest[0] if rest else ""
                 cmd = cmd.upper()
                 if cmd == "CAPABILITY":
-                    send(f"* CAPABILITY IMAP4rev1 {'AUTH=PLAIN' if tls else 'STARTTLS LOGINDISABLED'}\r\n{tag} OK done\r\n")
+                    send(f"* CAPABILITY IMAP4rev1 {'AUTH=PLAIN MOVE' if tls else 'STARTTLS LOGINDISABLED'}\r\n{tag} OK done\r\n")
                 elif cmd == "STARTTLS":
                     send(f"{tag} OK begin TLS\r\n")
                     conn = self.ctx.wrap_socket(conn, server_side=True)
@@ -72,8 +73,40 @@ class FakeBridge:
                     self.logins.append(user)
                     ok = tls and pw.strip('"') == self.password
                     send(f"{tag} OK logged in\r\n" if ok else f"{tag} NO wrong password\r\n")
-                elif cmd == "EXAMINE":
-                    send(f"* {len(self.messages)} EXISTS\r\n{tag} OK [READ-ONLY] done\r\n")
+                elif cmd == "LIST":
+                    pattern = arg.split(" ", 1)[-1].strip('"') if arg else "*"
+                    names = [n for n in self.folders if pattern in ("*", "%") or n == pattern]
+                    send("".join(f'* LIST (\\HasNoChildren) "/" "{name}"\r\n' for name in names) + f"{tag} OK done\r\n")
+                elif cmd == "CREATE":
+                    self.folders.setdefault(arg.strip('"'), [])
+                    send(f"{tag} OK created\r\n")
+                elif cmd == "UID":  # UIDs are positions; a moved message leaves a None behind
+                    sub, _, rest = arg.partition(" ")
+                    live = [(i + 1, m) for i, m in enumerate(self.messages) if m is not None]
+                    if sub.upper() == "SEARCH":
+                        send(f"* SEARCH {' '.join(str(u) for u, _ in live)}\r\n{tag} OK done\r\n")
+                    elif sub.upper() == "FETCH":
+                        want = {int(x) for x in rest.split(" ", 1)[0].split(",")}
+                        out = b""
+                        for u, m in live:
+                            if u in want:
+                                head = m.split(b"\r\n\r\n", 1)[0] + b"\r\n\r\n"
+                                out += f"* {u} FETCH (UID {u} BODY[HEADER] {{{len(head)}}}\r\n".encode() + head + b")\r\n"
+                        send(out + f"{tag} OK done\r\n".encode())
+                    elif sub.upper() == "MOVE":
+                        ids, dest = rest.split(" ", 1)
+                        for x in ids.split(","):
+                            self.folders.setdefault(dest.strip('"'), []).append(self.messages[int(x) - 1])
+                            self.messages[int(x) - 1] = None
+                        send(f"{tag} OK moved\r\n")
+                elif cmd in ("EXAMINE", "SELECT"):
+                    name = arg.strip().strip('"')
+                    if name not in self.folders:
+                        send(f"{tag} NO no such folder\r\n")
+                        continue
+                    self.messages = self.folders[name]
+                    mode = "READ-ONLY" if cmd == "EXAMINE" else "READ-WRITE"
+                    send(f"* {len(self.messages)} EXISTS\r\n{tag} OK [{mode}] done\r\n")
                 elif cmd == "SEARCH":
                     send(f"* SEARCH {' '.join(str(i + 1) for i in range(len(self.messages)))}\r\n{tag} OK done\r\n")
                 elif cmd == "FETCH":
@@ -159,3 +192,65 @@ def test_a_bcc_to_the_alias_counts_by_its_envelope(tmp_path):
         assert fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW, to="maker.x1@passmail.net") == "246810"
     finally:
         server.close()
+
+
+def test_codes_are_found_in_any_folder_but_trash_and_spam(tmp_path):
+    """Your filters file the bot's alias mail into a folder; spam and trash are never read."""
+    key, cert = _self_signed(tmp_path, "bridge")
+    server = FakeBridge(key, cert, messages={
+        "INBOX": [_mail("Other <hi@other.example>", "Hi", "nothing here", 30)],
+        "Folders/Aliases": [_mail("Shop <no-reply@shop.example>", "Code", "Your code is 482913", 60, to="maker.x1@passmail.net")],
+        "Spam": [_mail("Shop <no-reply@shop.example>", "Code", "Your code is 999999", 5, to="maker.x1@passmail.net")],
+        "Trash": [_mail("Shop <no-reply@shop.example>", "Code", "Your code is 888888", 5, to="maker.x1@passmail.net")],
+    })
+    try:
+        settings = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text())
+        assert fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW, to="maker.x1@passmail.net") == "482913"
+        assert fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW) == "482913"
+        only = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text(), folder="INBOX/none")
+        assert fetch_code(only, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW) is None  # a folder you set: only that
+    finally:
+        server.close()
+
+
+def test_all_mail_is_enough_when_bridge_has_it(tmp_path):
+    key, cert = _self_signed(tmp_path, "bridge")
+    code = _mail("Shop <no-reply@shop.example>", "Code", "Your code is 482913", 60)
+    server = FakeBridge(key, cert, messages={"INBOX": [], "All Mail": [code], "Folders/Shop": []})
+    try:
+        settings = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text())
+        assert fetch_code(settings, "me@proton.me", "bridge-pass", {"shop.example"}, now=NOW) == "482913"
+    finally:
+        server.close()
+
+
+def test_the_bots_folder_is_made_once(tmp_path):
+    from passbroker import botmail
+
+    key, cert = _self_signed(tmp_path, "bridge")
+    server = FakeBridge(key, cert, messages={"INBOX": []})
+    try:
+        settings = MailSettings(item="Bridge", port=server.port, cert_pem=cert.read_text())
+        assert botmail.make_folder(settings, "me@proton.me", "bridge-pass") is True
+        assert "Folders/Bots" in server.folders
+        assert botmail.make_folder(settings, "me@proton.me", "bridge-pass") is False  # already there
+        with pytest.raises(imaplib.IMAP4.error):
+            botmail.make_folder(settings, "me@proton.me", "wrong")
+    finally:
+        server.close()
+
+
+def test_the_rule_files_every_bot_alias():
+    from passbroker import accounts, botmail
+
+    assert accounts._prefix("anybot").startswith(botmail.PREFIX)
+    assert f'"{botmail.PREFIX}*"' in botmail.RULE and f'fileinto "{botmail.FOLDER}"' in botmail.RULE
+    assert "X-SimpleLogin-Envelope-To" in botmail.RULE  # a Bcc to the alias is filed too
+
+
+def test_making_the_folder_needs_email_codes_set_up(tmp_path):
+    from passbroker import botmail
+    from passbroker.ops import OpError
+
+    with pytest.raises(OpError, match="set up email codes first"):
+        botmail.setup("Agent", tmp_path / "mail.json")

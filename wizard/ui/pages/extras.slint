@@ -113,8 +113,21 @@ export component AccountsSection inherits VerticalLayout {
     if Wiz.login-state != "" && !Wiz.acc-enabled: Muted { text: Wiz.login-state; font-size: 12px; wrap: word-wrap; }
     if Wiz.login-url != "" && !Wiz.acc-enabled: HorizontalLayout { alignment: start; Button { text: "Open sign-in page"; clicked => { Wiz.open-url(Wiz.login-url); } } }
     Muted { text: Wiz.acc-enabled ? "On. Bots you allow can make accounts here (at most 10 a day each)." : "Off."; font-size: 12px; }
+    if Wiz.acc-enabled: Section { text: "Bots' mail"; }
+    if Wiz.acc-enabled: Muted {
+        text: "Each bot gets one alias, named bot-<name>…, for every account it makes. One rule in Proton Mail files all their mail into a Bots folder. A bot you mark as managing your mail (Access…) is asked to add it. Otherwise set it up here: the button makes the folder, copies the rule and opens Proton Mail's filters, where you press Add sieve filter and paste.";
+        font-size: 12px;
+        wrap: word-wrap;
+    }
+    if Wiz.acc-enabled && Wiz.acc-rule-note != "": Muted { text: Wiz.acc-rule-note; font-size: 12px; wrap: word-wrap; }
+    if Wiz.acc-enabled && !Wiz.locked: HorizontalLayout {
+        alignment: start;
+        spacing: 10px;
+        if Wiz.acc-rule-state != "done": Button { text: "Set up bot mail"; enabled: !Wiz.busy; clicked => { Wiz.acc-mail-setup(); } }
+        if Wiz.acc-rule-state != "done": Button { text: "I've added it"; enabled: !Wiz.busy; clicked => { Wiz.acc-rule-set("done"); } }
+        if Wiz.acc-rule-state != "": Button { text: "Set up again"; enabled: !Wiz.busy; clicked => { Wiz.acc-rule-set("reset"); } }
+    }
     if Wiz.acc-emails.length > 0: Section { text: "Bots' email addresses"; }
-    if Wiz.acc-emails.length > 0: Muted { text: "Each bot keeps the alias it was given and uses it for every account it makes. Turn one off in Proton Pass."; font-size: 12px; wrap: word-wrap; }
     for row in Wiz.acc-emails: Muted { text: row; font-size: 12px; overflow: elide; }
     if Wiz.acc-created.length > 0: Section { text: "Accounts bots made"; }
     for row in Wiz.acc-created: Muted { text: row; font-size: 12px; overflow: elide; }

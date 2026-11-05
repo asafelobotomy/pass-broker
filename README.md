@@ -327,8 +327,8 @@ files you're happy to send to xAI/Cursor.
   plus output only if you allow it.
 - **Email codes** (`fill_email_code`): the broker logs in to Proton Mail Bridge on this PC (IMAP,
   credentials from a vault item), takes the code from the newest message sent by the site's domain
-  in the last few minutes (left unread), and fills it in pinned like a password. The bot never sees
-  the code or the mail.
+  in the last few minutes, in any folder but trash and spam (left unread), and fills it in
+  pinned like a password. The bot never sees the code or the mail.
 
 ### Bots making their own accounts
 
@@ -347,16 +347,39 @@ A bot you allow can sign up on a site by itself, so you don't have to make every
    its sign-up form for 10 minutes.
 
 **Each bot has one email address.** The first time a bot needs one (`email_address`, or
-`create_login` with `email_alias`), you approve a new hide-my-email alias that forwards to you. That
-alias is then the bot's for good: every account it makes is saved with it and filled in with it,
-without asking for another, and the bot may give it out where a site or form wants an email. It's
-the only address the bot learns. The tab lists each bot's address; to stop mail to one, turn the
-alias off in Proton Pass.
+`create_login` with `email_alias`), you approve a new hide-my-email alias that forwards to you, named
+`bot-<name>.<random>@…`. That alias is then the bot's for good: every account it makes is saved
+with it and filled in with it, without asking for another, and the bot may give it out where a site
+or form wants an email. It's the only address the bot learns. The tab lists each bot's address; to
+stop mail to one, turn the alias off in Proton Pass.
+
+**All bot mail in one folder.** Because every bot alias starts with `bot-`, one rule in Proton Mail
+files all of it, including bots added later, into a **Bots** folder. Pass Broker never changes your
+mail settings itself; it hands the job to whoever can do it, once:
+
+- A bot you mark as **Manages your mail** (in its **Access…**; it has mail access of its own) is
+  given the job: it sees it with `mail_tasks`, adds the folder and the rule, and reports
+  `mail_rule_done`. If the bot asking for an alias manages your mail, it does it straight away.
+- With no such bot, the bot that got the alias is asked to tell you, and the **Bot accounts** tab
+  has **Set up bot mail**: it makes the folder (through Proton Mail Bridge, if email codes are set
+  up), copies the rule and opens Proton Mail's filters page, where you press **Add sieve filter**,
+  paste and save. Then press **I've added it**.
+
+The tab shows who has the job or who did it; **Set up again** asks again. The rule:
+
+```
+require ["fileinto"];
+if anyof (address :localpart :matches ["to", "cc"] "bot-*",
+          header :matches "X-SimpleLogin-Envelope-To" "bot-*") {
+    fileinto "Bots";
+}
+```
 
 The new login is granted to the bot that made it, so it can sign in later with `fill_login`, still
 with your Allow each time. If the site then emails a code, `fill_email_code` reads it (when the bot
-may use email codes). For an account made with the bot's alias, only mail sent to that alias counts,
-so a code meant for your own account on the same site never goes to the bot's.
+may use email codes). Codes are looked for in every folder (not trash or spam), since your filters
+may file them anywhere. For an account made with the bot's alias, only mail sent to that alias
+counts, so a code meant for your own account on the same site never goes to the bot's.
 
 Set it up in the wizard's **Bot accounts** tab (step 5), or with
 `passbroker api accounts-setup --vault "Bot Accounts"` while pass-cli is signed in as you. That

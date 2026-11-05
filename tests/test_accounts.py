@@ -61,7 +61,7 @@ async def test_make_an_account_and_sign_up_without_seeing_it(setup, site, tmp_pa
     assert password not in json.dumps(result) and result["url"].endswith("/welcome")
     path, form = site.posts[-1]
     assert path == "/signup" and form["password"] == [password] and form["confirm"] == [password]
-    assert form["email"] == [made["email"]] and made["email"].startswith("maker.") and form["name"] == ["Maker Bot"]
+    assert form["email"] == [made["email"]] and made["email"].startswith("bot-maker.") and form["name"] == ["Maker Bot"]
     assert bots.email("maker") == made["email"]  # the bot's address from now on
     assert len(approver.asked) == 1  # approving the account covered its own sign-up form
     assert password not in (tmp_path / "audit.jsonl").read_text()
@@ -215,7 +215,7 @@ async def test_email_address_needs_permission(setup):
 
 def test_titles_never_collide():
     assert accounts._title("example.com", "maker", {"example.com (maker)", "example.com (maker) 2"}) == "example.com (maker) 3"
-    assert accounts._prefix("mail-bot") == "mailbot" and accounts._prefix("..") == "bot"
+    assert accounts._prefix("mail-bot") == "bot-mailbot" and accounts._prefix("..") == "bot-bot"
 
 
 def test_proton_backend_never_handles_the_password(tmp_path):

@@ -40,6 +40,11 @@ FRESH_S = 600  # approving the new account also covers its sign-up form, for thi
 class AccountSettings:
     vault: str = "Bot Accounts"
     enabled: bool = False
+    # The Proton Mail rule that files bot mail into Bots (botmail.py): '', 'asked' (a mail bot
+    # was given the job), or 'done'; who it went to or who did it, and when.
+    rule: str = ""
+    rule_by: str = ""
+    rule_at: str = ""
 
 
 def settings_path() -> Path:
@@ -110,7 +115,7 @@ def setup(vault: str, agent: str, main_vault: str, pass_cli: str = "pass-cli", s
         run(["vault", "create", "--name", vault], f"creating the {vault} vault")
     if not sees(vault, pass_cli):
         _grant_the_brokers_agent(run, sees, agent, vault, main_vault, pass_cli)
-    jsonfile.write(settings_path(), asdict(AccountSettings(vault=vault, enabled=True)))
+    jsonfile.write(settings_path(), asdict(AccountSettings(**{**asdict(load()), "vault": vault, "enabled": True})))
     return {"vault": vault, "enabled": True}
 
 
@@ -195,7 +200,7 @@ class AccountsMixin:
                 await self._approve(client, placeholder, "email", "email_alias", "get its own email address", details, reason)
                 email = await self._new_alias(client, settings, bot)
         return {"email": email, "note": "your own address: every account you make uses it, and codes sent to it can be "
-                                        "entered with fill_email_code"}
+                                        "entered with fill_email_code", **self.mail_rule_guidance(bot or conn)}
 
     async def create_login(
         self: "Broker", client: str, username: str = "", email_alias: bool = False,
@@ -256,9 +261,13 @@ class AccountsMixin:
         self.audit.record("create_login", client=client, item=title, host=site, alias=bool(email))
         return {"status": "created", "handle": login.handle, "title": title, "site": site,
                 **({"username": username} if username else {}), **({"email": email} if email else {}),
+                **(self.mail_rule_guidance(bot or conn) if make_alias else {}),
                 "next": "fill in the other fields yourself (not the username, email or passwords), then call fill_signup with this handle"}
 
 
 def _prefix(name: str) -> str:
-    """`mail-bot` -> `mailbot`: the alias says which bot it belongs to."""
-    return re.sub(r"[^a-z0-9]", "", name.lower())[:20] or "bot"
+    """`mail-bot` -> `bot-mailbot`: the alias says which bot it's for, and the `bot-` start lets one
+    Proton Mail rule file every bot's mail together (botmail.py)."""
+    from .botmail import PREFIX
+
+    return PREFIX + (re.sub(r"[^a-z0-9]", "", name.lower())[:20] or "bot")

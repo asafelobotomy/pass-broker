@@ -138,6 +138,9 @@ pub fn refresh(app: &Shared, ui: &AppWindow) {
             .map(|e| format!("{}  ·  {}  ·  since {}", s(&e["bot"]), s(&e["address"]), s(&e["at"])).into())
             .collect();
         g.set_acc_emails(ModelRc::new(VecModel::from(emails)));
+        g.set_acc_rule(s(&acc["rule_text"]).into());
+        g.set_acc_rule_state(s(&acc["rule"]).into());
+        g.set_acc_rule_note(rule_note(&s(&acc["rule"]), &s(&acc["rule_by"]), &s(&acc["rule_at"])).into());
     });
 }
 
@@ -164,6 +167,38 @@ fn wire_accounts(app: &Shared, ui: &AppWindow) {
             });
         }
     });
+    // Make the folder through Bridge (if email codes are set up), copy the rule, open Proton Mail's
+    // filters: all that's left is Add sieve filter, paste, save.
+    wiz(ui).on_acc_mail_setup({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || {
+            let Some(ui) = w.upgrade() else { return };
+            let (vault, url) = (a.state.lock().unwrap().settings.vault.clone(), FILTERS_URL.to_string());
+            let cmd = vec!["mail-bots-folder".to_string(), "--vault".into(), vault];
+            bg(&a, &ui, "Making the Bots folder through Bridge…", move |app| app.cli.call(&cmd, None), move |ui, app, r| {
+                let folder = match r {
+                    Ok(_) => "The Bots folder is ready.".to_string(),
+                    Err(_) => "Make a folder called Bots in Proton Mail too (Bridge couldn't).".to_string(),
+                };
+                crate::live_cb::copy_text(app, ui, wiz(ui).get_acc_rule().to_string(), false);
+                crate::open_url(&url);
+                wiz(ui).set_extras_note(format!("{folder} The rule is copied: in the page that opened, press Add sieve filter, paste, save, then press I've added it.").into());
+            });
+        }
+    });
+    wiz(ui).on_acc_rule_set({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move |state| {
+            let Some(ui) = w.upgrade() else { return };
+            let cmd = vec!["accounts-rule".to_string(), state.to_string()];
+            bg(&a, &ui, "Saving…", move |app| app.cli.call(&cmd, None), |ui, app, r| {
+                if let Err(e) = r {
+                    wiz(ui).set_extras_note(e.into());
+                }
+                refresh(app, ui);
+            });
+        }
+    });
     wiz(ui).on_acc_off({
         let (a, w) = (app.clone(), ui.as_weak());
         move || {
@@ -180,6 +215,18 @@ fn wire_accounts(app: &Shared, ui: &AppWindow) {
     });
 }
 
+const FILTERS_URL: &str = "https://account.proton.me/mail/filters";
+
+/// Where the bot-mail rule stands, for the Bot accounts tab.
+fn rule_note(state: &str, by: &str, at: &str) -> String {
+    match state {
+        "done" if by == "you" => format!("The bot-mail rule is set up (you, {at})."),
+        "done" => format!("The bot-mail rule is set up (by {by}, {at})."),
+        "asked" => format!("{by} manages your mail and has the job of adding the rule (since {at}). Or set it up yourself here."),
+        _ => String::new(),
+    }
+}
+
 fn device_row(d: &Value) -> DeviceRow {
     let kind = s(&d["kind"]);
     let target = match kind.as_str() {
@@ -193,5 +240,18 @@ fn device_row(d: &Value) -> DeviceRow {
         target: target.into(),
         item: s(&d["item"]).into(),
         returns: d["return_output"].as_bool().unwrap_or(false),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::rule_note;
+
+    #[test]
+    fn rule_note_says_who_and_when() {
+        assert_eq!(rule_note("", "", ""), "");
+        assert!(rule_note("asked", "mailbot", "2026-11-05 22:00").starts_with("mailbot manages your mail"));
+        assert_eq!(rule_note("done", "you", "2026-11-05 22:00"), "The bot-mail rule is set up (you, 2026-11-05 22:00).");
+        assert!(rule_note("done", "mailbot", "x").contains("by mailbot"));
     }
 }

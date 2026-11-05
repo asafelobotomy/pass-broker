@@ -47,7 +47,7 @@ def _store(kind: str):
 def c_config(a) -> dict[str, Any]:
     from dataclasses import asdict as _asdict
 
-    from . import accounts
+    from . import accounts, botmail
     from .mailcode import MailSettings
 
     mail = MailSettings.load(ops.dirs()[0] / "mail.json")
@@ -55,7 +55,8 @@ def c_config(a) -> dict[str, Any]:
     made = [{"bot": b["name"], **c} for b in bots for c in b.get("created", [])]
     emails = [{"bot": b["name"], **b["email"]} for b in bots if b.get("email")]
     return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
-            "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True), "emails": emails}}
+            "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True), "emails": emails,
+                         "rule_text": botmail.RULE}}
 
 
 def c_config_add(a) -> dict[str, Any]:
@@ -94,6 +95,26 @@ def c_mail_set(a) -> dict[str, Any]:
         raise ops.OpError(str(e)) from None
 
 
+def c_mail_bots_folder(a) -> dict[str, Any]:
+    """Make the Bots folder through Bridge; returns the Proton Mail rule that fills it."""
+    from . import botmail
+
+    return botmail.setup(a.vault, ops.dirs()[0] / "mail.json", a.pass_cli)
+
+
+def c_accounts_rule(a) -> dict[str, Any]:
+    """You added the bot-mail rule yourself (done), or want a mail bot asked again (reset)."""
+    import time
+    from dataclasses import asdict as _asdict
+
+    from . import accounts, jsonfile
+
+    s = accounts.load()
+    s.rule, s.rule_by, s.rule_at = ("done", "you", time.strftime("%Y-%m-%d %H:%M")) if a.state == "done" else ("", "", "")
+    jsonfile.write(accounts.settings_path(), _asdict(s))
+    return _asdict(s)
+
+
 def c_accounts_setup(a) -> dict[str, Any]:
     """Make the Bot Accounts vault and give the broker's agent editor access there (as you)."""
     from . import accounts
@@ -123,9 +144,11 @@ def add_parsers(add) -> None:
     add("accounts-setup", c_accounts_setup, (("--vault",), {"default": "Bot Accounts"}), (("--agent",), {"default": "passbroker"}),
         (("--main-vault",), {"default": VAULT}), (("--stay-signed-in",), {"action": "store_true"}))
     add("accounts-off", c_accounts_off)
+    add("accounts-rule", c_accounts_rule, (("state",), {"choices": ["done", "reset"]}))
     add("pair", c_pair, (("--close",), {"action": "store_true"}))
     add("bot-access", c_bot_access, (("name",), {}))
     add("config", c_config)
     add("config-add", c_config_add, (("kind",), {"choices": ["keys", "devices"]}))
     add("config-remove", c_config_remove, (("kind",), {"choices": ["keys", "devices"]}), (("name",), {}))
     add("mail-set", c_mail_set)
+    add("mail-bots-folder", c_mail_bots_folder, (("--vault",), {"default": VAULT}))

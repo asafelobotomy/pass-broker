@@ -195,6 +195,11 @@ export global Wiz {
     in-out property <string> acc-vault: "Bot Accounts";
     in property <[string]> acc-created;
     in property <[string]> acc-emails;  // each bot's own email alias
+    in property <string> acc-rule;  // the Proton Mail filter that files bot mail into Bots
+    in property <string> acc-rule-state;  // '', 'asked' or 'done'
+    in property <string> acc-rule-note;  // who has the job, or who did it and when
+    callback acc-mail-setup;  // make the folder, copy the rule, open Proton Mail's filters
+    callback acc-rule-set(string);  // 'done' or 'reset'
     callback acc-setup;
     callback acc-off;
 
@@ -203,6 +208,7 @@ export global Wiz {
     in property <[AccessItem]> access-items;
     in-out property <bool> access-email: false;
     in-out property <bool> access-create: false;
+    in-out property <bool> access-mail: false;  // has its own access to your mail
     in-out property <bool> access-personal: false;
     in-out property <bool> access-sites-limited: false;
     in-out property <string> access-sites;

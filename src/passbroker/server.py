@@ -43,7 +43,9 @@ user without ever showing you a password, passphrase or code.
   other fields yourself, then fill_signup with the handle. Later, sign in with that handle like
   any other login.
 - Need an email address? email_address gives you your own (made once, with the user's
-  approval); use it everywhere instead of making up one.
+  approval); use it everywhere instead of making up one. If its reply has `mail_rule`, follow
+  it: set it up (`to_do`), or tell your user (`tell_your_user`).
+- If the user says you manage their mail, call mail_tasks at the start of each task.
 - When the task is done, call end_session to sign your browser out of everything.
 - Locked files: list_unlockers, list_locked_files, unlock_file. Encrypted text: list_keys,
   encrypt_text, decrypt_text. Home devices: list_device_actions, run_device_action.
