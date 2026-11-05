@@ -93,7 +93,7 @@ export component ControlPage inherits VerticalLayout {
             spacing: 10px;
             Switch {
                 text: "Run in the background (sandboxed systemd service)";
-                checked: Wiz.service-mode;
+                checked <=> Wiz.service-mode;
                 enabled: !Wiz.running;
                 toggled => { Wiz.set-service-mode(self.checked); }
             }

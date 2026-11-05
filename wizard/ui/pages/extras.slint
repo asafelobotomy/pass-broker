@@ -22,6 +22,7 @@ export component KeysSection inherits VerticalLayout {
     }
     if !Wiz.locked: VerticalLayout {
         spacing: 8px;
+        vertical-stretch: 0;
         Rectangle { height: 1px; background: Theme.line; }
         Section { text: "Add a key"; }
         Field { label: "Name"; LineEdit { text <=> Wiz.k-name; placeholder-text: "e.g. ledger"; } }
@@ -49,6 +50,7 @@ export component DevicesSection inherits VerticalLayout {
     }
     if !Wiz.locked: VerticalLayout {
         spacing: 8px;
+        vertical-stretch: 0;
         Rectangle { height: 1px; background: Theme.line; }
         Section { text: "Add a device action"; }
         Field { label: "Name"; LineEdit { text <=> Wiz.d-name; placeholder-text: "e.g. wake-nas"; } }
