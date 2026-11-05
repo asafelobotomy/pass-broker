@@ -1,6 +1,6 @@
 // The approval prompt (mirrors the desktop notification) and the Settings dialog.
 
-import { Button, ComboBox, Switch } from "std-widgets.slint";
+import { AboutSlint, Button, ComboBox, Switch } from "std-widgets.slint";
 import { Theme, Muted, Heading, Section } from "theme.slint";
 import { Wiz } from "store.slint";
 
@@ -44,6 +44,8 @@ export component ApprovalDialog inherits Rectangle {
 }
 
 export component SettingsDialog inherits Rectangle {
+    // About shows the AboutSlint widget: the attribution Slint's royalty-free licence asks for.
+    property <bool> about;
     background: #0008;
     TouchArea { }
     Rectangle {
@@ -54,6 +56,18 @@ export component SettingsDialog inherits Rectangle {
         inner := VerticalLayout {
             padding: 24px;
             spacing: 12px;
+            if about: Heading { text: "About Pass Broker"; font-size: 18px; }
+            if about: Muted {
+                text: "Version " + Wiz.app-version + ". Free software under the MIT licence; the libraries it includes and their licences are listed in THIRD_PARTY_LICENSES, inside the AppImage (usr/share/doc/pass-broker) and on each release.";
+                wrap: word-wrap;
+            }
+            if about: Muted { text: "https://github.com/asafelobotomy/pass-broker"; font-size: 12px; }
+            if about: AboutSlint { }
+            if about: HorizontalLayout {
+                alignment: end;
+                Button { text: "Back"; clicked => { about = false; } }
+            }
+            if !about: VerticalLayout { spacing: 12px;
             Heading { text: "Settings"; font-size: 18px; }
             Section { text: "Startup"; }
             Switch { text: "Open Pass Broker when I log in"; checked <=> Wiz.pref-login; }
@@ -82,9 +96,11 @@ export component SettingsDialog inherits Rectangle {
             if Wiz.settings-note != "": Muted { text: Wiz.settings-note; font-size: 12px; color: Theme.bad; wrap: word-wrap; }
             HorizontalLayout {
                 spacing: 10px;
-                alignment: end;
+                Button { text: "About"; clicked => { about = true; } }
+                Rectangle { }
                 Button { text: "Cancel"; clicked => { Wiz.settings-open = false; } }
                 Button { text: "Save"; primary: true; clicked => { Wiz.save-settings(); } }
+            }
             }
         }
     }

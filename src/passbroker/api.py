@@ -316,7 +316,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     add("funnel-cleanup", c_funnel_cleanup, (("--port",), {"type": int, "default": 8787}))
     add("install-browser", c_install_browser)
     add("serve-command", c_serve_command, (("--port",), {"type": int, "default": 8787}), vault,
-        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 10}),
+        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 2}),
         (("--headless",), {"action": "store_true"}), (("--keep-sessions",), {"action": "store_true"}),
         (("--idle-minutes",), {"type": float, "default": 15}))
     add("clear-browser", c_clear_browser)

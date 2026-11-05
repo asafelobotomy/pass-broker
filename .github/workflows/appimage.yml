@@ -2,13 +2,27 @@ name: AppImage
 
 # Built on the oldest supported Ubuntu, so the AppImage runs on any desktop Linux with
 # glibc 2.35 or newer (the bundled Python needs only 2.17; the wizard sets the floor).
+# Pull requests that touch what goes into it build it too. A v* tag builds it without caches,
+# checks the tag matches the version in the source, and drafts a GitHub release with the files.
 on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - packaging/**
+      - wizard/**
+      - src/**
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/appimage.yml
 
 permissions:
   contents: read
+
+concurrency:
+  group: appimage-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   appimage:
@@ -18,11 +32,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: The tag matches the version in the source
+        if: github.ref_type == 'tag'
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          py="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+          rs="$(sed -n 's/^version = "\(.*\)"/\1/p' wizard/Cargo.toml | head -1)"
+          echo "tag $want, pyproject $py, wizard $rs"
+          [ "$py" = "$want" ] && [ "$rs" = "$want" ] || { echo "::error::bump pyproject.toml and wizard/Cargo.toml to $want before tagging"; exit 1; }
+      # uv is pinned: it picks the exact Python build that goes into the AppImage. Its own
+      # cache is off for tag builds ("auto").
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: "0.12.23"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: github.ref_type != 'tag' # a release is built from scratch
         with:
           workspaces: wizard
       - name: Build tools and the libraries the wizard links against
@@ -32,11 +59,33 @@ jobs:
       - name: Smoke test (no FUSE on the runner)
         run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Pass_Broker-x86_64.AppImage passbroker --help
       - name: Checksum
-        run: cd dist && sha256sum Pass_Broker-x86_64.AppImage > Pass_Broker-x86_64.AppImage.sha256
+        run: cd dist && sha256sum Pass_Broker-x86_64.AppImage > Pass_Broker-x86_64.AppImage.sha256 && cat Pass_Broker-x86_64.AppImage.sha256
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Pass_Broker-x86_64.AppImage
           path: |
             dist/Pass_Broker-x86_64.AppImage
             dist/Pass_Broker-x86_64.AppImage.sha256
+            dist/THIRD_PARTY_LICENSES
           if-no-files-found: error
+
+  release:
+    name: Draft the release
+    needs: appimage
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # only this job can create the release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Pass_Broker-x86_64.AppImage
+          path: dist
+      - name: Draft it (you add the notes and publish)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist && sha256sum -c Pass_Broker-x86_64.AppImage.sha256
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --verify-tag \
+            --title "Pass Broker ${GITHUB_REF_NAME#v}" --notes "Release notes to come." \
+            Pass_Broker-x86_64.AppImage Pass_Broker-x86_64.AppImage.sha256 THIRD_PARTY_LICENSES

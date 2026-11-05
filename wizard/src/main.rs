@@ -86,6 +86,7 @@ fn main() -> Result<(), slint::PlatformError> {
         journal: Mutex::new(None),
     });
 
+    wiz(&ui).set_app_version(env!("CARGO_PKG_VERSION").into());
     wiz(&ui).set_expirations(strings(EXPIRATIONS.iter().map(|x| x.to_string())));
     wiz(&ui).set_unlock_warnings(strings(UNLOCK_WARNINGS.iter().map(|x| x.to_string())));
     view::load_settings_into_ui(&app, &ui);

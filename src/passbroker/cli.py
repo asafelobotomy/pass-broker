@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--vault", default="Agent", help="Proton Pass vault the token can read (default: Agent)")
     s.add_argument("--port", type=int, default=8787)
     s.add_argument("--public-host", action="append", default=[], help="tunnel hostname allowed in the Host header, e.g. pass.example.com")
-    s.add_argument("--grant-minutes", type=float, default=10, help="how long one Allow lasts for the same item and site (0 = ask every time)")
+    s.add_argument("--grant-minutes", type=float, default=2, help="how long one Allow lasts for the same item and site (0 = ask every time)")
     s.add_argument("--approval-timeout", type=int, default=60)
     s.add_argument("--headless", action="store_true", help="run the browser without a window; the wizard's Control center shows it instead")
     s.add_argument("--pass-cli", default="pass-cli")

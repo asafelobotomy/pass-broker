@@ -37,9 +37,9 @@ jobs:
       - name: Chromium for the browser tests
         run: uv run playwright install --with-deps chromium
       - name: Lint
-        run: uvx ruff check --select F,E9,B,UP,SIM,PIE,I --ignore UP037,SIM105,SIM108,SIM117,B008 src tests
+        run: uv run ruff check --select F,E9,B,UP,SIM,PIE,I --ignore UP037,SIM105,SIM108,SIM117,B008 src tests
       - name: Dependencies declared
-        run: uvx deptry src
+        run: uv run deptry src
       - name: Tests (includes the 400-line limit)
         run: uv run pytest -q
 
@@ -66,6 +66,25 @@ jobs:
         run: cargo clippy --locked --release -- -D warnings
       - name: Tests
         run: cargo test --locked --release
+
+  audit:
+    name: Known vulnerabilities and licences
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: Python dependencies the broker ships (pip-audit)
+        run: |
+          uv export --frozen --no-dev --no-emit-project -q > "$RUNNER_TEMP/requirements.txt"
+          uv run --frozen --only-dev pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+      - name: Rust crates the wizard ships (cargo-deny)
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          manifest-path: wizard/Cargo.toml
+          arguments: --locked --all-features
+          command: check
 
   secrets:
     name: Secret scan

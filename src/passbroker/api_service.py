@@ -36,7 +36,7 @@ def c_service_control(a) -> dict[str, Any]:
 def add_parsers(add, vault) -> None:
     serve_opts = (
         (("--port",), {"type": int, "default": 8787}), vault,
-        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 10}),
+        (("--public-host",), {"action": "append", "default": []}), (("--grant-minutes",), {"type": float, "default": 2}),
         (("--headless",), {"action": "store_true"}), (("--keep-sessions",), {"action": "store_true"}),
         (("--idle-minutes",), {"type": float, "default": 15}),
     )

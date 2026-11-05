@@ -56,9 +56,13 @@ command line is inside too: `./Pass_Broker-x86_64.AppImage passbroker --help`. T
 service and **Open Pass Broker when I log in** point at the AppImage file itself, so keep it
 where it is (or turn them off and on again after moving it).
 
-Build it with `packaging/appimage/build.sh` (needs cargo, uv and squashfs-tools; the result is
-in `dist/`). A build only runs on systems with the glibc of the machine that built it, so
-releases come from the **AppImage** GitHub Actions workflow, which builds on Ubuntu 22.04.
+Build it with `packaging/appimage/build.sh` (needs git, cargo, uv and squashfs-tools; the
+result is in `dist/`). It builds the last commit only (`BUILD_DIRTY=1` includes uncommitted
+changes), with a fixed Python and timestamps from that commit, so the same commit built the same
+way gives the same file. A build only runs on systems with the glibc of the machine that built
+it, so releases come from the **AppImage** GitHub Actions workflow, which builds on Ubuntu 22.04.
+Pushing a `v*` tag builds without caches, checks the tag matches the version in the source, and
+drafts the release.
 
 ## Set up with the wizard (easiest)
 
@@ -195,7 +199,8 @@ A Chromium window opens so you can watch what the assistant does. Add `--headles
 off your desktop; the wizard then shows it live in its Control center instead.
 Approvals appear as desktop notifications with **Allow** and **Deny**, and, while the app is
 open, as a dialog in the app with the same buttons. Whichever you answer first counts and the
-other disappears. If nobody answers in 60 seconds, it's denied. `--grant-minutes 0` asks every
+other disappears. If nobody answers in 60 seconds, it's denied. An Allow covers the same item and site for 2
+minutes (`--grant-minutes`, or **Each Allow lasts** in the wizard); `--grant-minutes 0` asks every
 time.
 
 ### 5. Expose it to Grok with Tailscale Funnel
@@ -441,4 +446,12 @@ cargo test --manifest-path wizard/Cargo.toml
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The AppImage includes libraries under their own licences, all listed
+with their licence texts in `THIRD_PARTY_LICENSES` (attached to each release, and in the AppImage
+under `usr/share/doc/pass-broker`). CI checks the Python and Rust dependencies for known
+vulnerabilities (pip-audit, cargo-deny) and that every Rust licence is one we can ship.
+
+The wizard's interface is built with [Slint](https://slint.dev), used under the Slint
+Royalty-free Desktop, Mobile, and Web Applications License (Settings › About shows its notice).
+
+[![Made with Slint](https://raw.githubusercontent.com/slint-ui/slint/master/logo/MadeWithSlint-logo-whitebg.png)](https://slint.dev)
