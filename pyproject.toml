@@ -1,6 +1,6 @@
 [project]
 name = "passbroker"
-version = "0.3.0"
+version = "0.3.1"
 description = "Let AI assistants sign in, unlock files and run home-device actions with Proton Pass secrets, without ever seeing them."
 readme = "README.md"
 license = "MIT"

@@ -4,7 +4,7 @@ Each release on [GitHub](https://github.com/asafelobotomy/pass-broker/releases) 
 and fuller notes. Versions follow [semantic versioning](https://semver.org): before 1.0, a new
 minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes.
 
-## Unreleased
+## 0.3.1
 
 - `passbroker --version`; SECURITY.md says which versions get fixes.
 - One desktop file and icon name (`pass-broker`), checked in CI; the README installs the
