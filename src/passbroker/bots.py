@@ -9,6 +9,8 @@ one off by name without revoking the connection every bot shares.
 Each bot also has an access list: which logins, unlock actions, devices and
 keys it may use, and whether it may use email codes. A new bot starts with
 nothing (it can only browse in its own session) until you grant it more.
+It also says whether the bot may see personal details on pages (masked by
+default, see pii.py) and, optionally, the only sites it may open.
 """
 
 from __future__ import annotations
@@ -26,10 +28,22 @@ from typing import Any
 
 NAME_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,31}")
 KINDS = ("logins", "unlock", "devices", "keys")
+HOST_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)+")
+MAX_SITES = 100
 
 
 def empty_access() -> dict[str, Any]:
-    return {"logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False}
+    return {
+        "logins": [], "unlock": [], "devices": [], "keys": [], "email_codes": False,
+        "personal_details": False, "sites_limited": False, "sites": [],
+    }
+
+
+def clean_site(text: str) -> str | None:
+    """`https://www.Example.com/path` -> `www.example.com`; None if it isn't a hostname."""
+    host = str(text).strip().lower().split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0].strip(".")
+    host = host.removeprefix("*.")
+    return host if HOST_RE.fullmatch(host) and len(host) <= 253 else None
 
 
 class BotError(Exception):
@@ -118,6 +132,15 @@ class Bots:
         for kind in KINDS:
             clean[kind] = sorted({str(x)[:120] for x in access.get(kind, []) if str(x).strip()})
         clean["email_codes"] = bool(access.get("email_codes", False))
+        clean["personal_details"] = bool(access.get("personal_details", False))
+        clean["sites_limited"] = bool(access.get("sites_limited", False))
+        sites = access.get("sites", [])
+        if isinstance(sites, str):
+            sites = re.split(r"[\s,]+", sites)
+        bad = [s for s in sites if str(s).strip() and clean_site(s) is None]
+        if bad:
+            raise BotError(f"not a website address: {str(bad[0])[:60]}")
+        clean["sites"] = sorted({h for s in sites if (h := clean_site(s))})[:MAX_SITES]
         with self._lock, self._edit() as data:
             entry = data.setdefault(name, {"enabled": True, "first_seen": time.strftime("%Y-%m-%d %H:%M"), "connections": []})
             entry["access"] = clean

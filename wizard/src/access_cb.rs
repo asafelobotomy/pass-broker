@@ -43,6 +43,10 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
                 }
                 let g = wiz(ui);
                 g.set_access_email(current["email_codes"].as_bool().unwrap_or(false));
+                g.set_access_personal(current["personal_details"].as_bool().unwrap_or(false));
+                g.set_access_sites_limited(current["sites_limited"].as_bool().unwrap_or(false));
+                let sites: Vec<String> = current["sites"].as_array().into_iter().flatten().map(s).collect();
+                g.set_access_sites(sites.join(", ").into());
                 g.set_access_items(ModelRc::new(VecModel::from(items)));
                 g.set_access_bot(bot.into());
             });
@@ -73,7 +77,11 @@ pub fn wire_access(app: &Shared, ui: &AppWindow) {
             let Some(ui) = w.upgrade() else { return };
             let g = wiz(&ui);
             let bot = g.get_access_bot().to_string();
-            let mut access = json!({"logins": [], "unlock": [], "keys": [], "devices": [], "email_codes": g.get_access_email()});
+            let mut access = json!({
+                "logins": [], "unlock": [], "keys": [], "devices": [], "email_codes": g.get_access_email(),
+                "personal_details": g.get_access_personal(), "sites_limited": g.get_access_sites_limited(),
+                "sites": g.get_access_sites().as_str(),
+            });
             for row in g.get_access_items().iter().filter(|r| r.on) {
                 if let Some(list) = access[row.kind.as_str()].as_array_mut() {
                     list.push(json!(row.name.as_str()));

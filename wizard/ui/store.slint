@@ -172,6 +172,9 @@ export global Wiz {
     in property <string> access-bot;
     in property <[AccessItem]> access-items;
     in-out property <bool> access-email: false;
+    in-out property <bool> access-personal: false;
+    in-out property <bool> access-sites-limited: false;
+    in-out property <string> access-sites;
     callback open-access(string);
     callback access-toggle(int, bool);
     callback save-access;

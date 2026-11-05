@@ -174,7 +174,7 @@ export component AppWindow inherits Window {
         TouchArea { }
         Rectangle {
             width: 560px;
-            height: min(root.height - 80px, 620px);
+            height: min(root.height - 80px, 700px);
             border-radius: 14px;
             background: Theme.card;
             VerticalLayout {
@@ -195,6 +195,10 @@ export component AppWindow inherits Window {
                     }
                 }
                 Switch { text: "May use email codes (read through Proton Mail Bridge)"; checked <=> Wiz.access-email; }
+                Switch { text: "May see personal details on pages (emails, phone, card and bank numbers)"; checked <=> Wiz.access-personal; }
+                Switch { text: "May open only these sites"; checked <=> Wiz.access-sites-limited; }
+                if Wiz.access-sites-limited: LineEdit { text <=> Wiz.access-sites; placeholder-text: "e.g. amazon.co.uk, royalmail.com"; }
+                if Wiz.access-sites-limited: Muted { text: "Plus the sites of its ticked logins. Subdomains are included. Pages it opens, links it clicks and redirects all stay on these sites."; font-size: 12px; wrap: word-wrap; }
                 HorizontalLayout {
                     spacing: 10px;
                     alignment: end;

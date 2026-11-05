@@ -72,6 +72,14 @@ STAY = """<!doctype html><title>Stay</title>
 <button id=show onclick="document.getElementById('pw').type='text'">Show password</button>"""
 
 
+# An account page full of personal details, with a link off to another host.
+ACCOUNT = """<!doctype html><title>Account of alice@example.com</title><h1>Your account</h1>
+<p id=email>Email: alice@example.com</p><p id=phone>Phone: +44 7700 900123</p>
+<p id=card>Card: 4111 1111 1111 1111</p><p>Order 1234567 shipped on 2026-11-04.</p>
+<label>Recovery email <input id=rec type=email value="bob@example.org"></label>
+<a id=away href="http://localhost:{port}/welcome">elsewhere</a>"""
+
+
 class Site:
     def __init__(self) -> None:
         self.posts: list[tuple[str, dict[str, list[str]]]] = []
@@ -109,6 +117,7 @@ class Site:
                     "/evil": EVIL,
                     "/split-stay": SPLIT_STAY,
                     "/welcome": "<!doctype html><title>Welcome</title><h1>Welcome, alice</h1>",
+                    "/account": ACCOUNT.format(port=port),
                     "/framed": f'<!doctype html><title>Framed</title><iframe src="http://127.0.0.1:{port}/login" width=600 height=400></iframe>',
                 }
                 if self.path in pages:

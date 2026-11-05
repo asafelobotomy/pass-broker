@@ -19,6 +19,7 @@ from .bots import BotError, Bots
 from .broker import Broker, BrokerError
 from .oauth import BrokerOAuth
 from .origin import host_of
+from .pii import mask_obj
 from .redact import Redactor
 from .session import BrowserError
 
@@ -80,8 +81,9 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
         return client, await broker.browser.session(client)
 
     def remember(client: str, result: dict[str, Any]) -> dict[str, Any]:
+        """Every page-derived result passes here: note the site, and mask personal details."""
         sites[client] = host_of(result.get("url", "")) if result.get("url") else sites.get(client.lower(), "")
-        return result
+        return mask_obj(result) if broker.hides_personal(client) else result
 
     # ---- sign-ins ---------------------------------------------------------------------
 
@@ -125,12 +127,12 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
             async with s.lock:
                 return safe(remember(client, await s.press(key)))
 
-    @mcp.tool(description="Screenshot of your bot's current tab, with secret fields blacked out. " + BOT)
+    @mcp.tool(description="Screenshot of your bot's current tab, with secret fields (and, unless allowed, personal details) blacked out. " + BOT)
     async def screenshot(ctx: Context, bot: str) -> Image:
         with errors():
-            _, s = await browse(ctx, bot, "screenshot")
+            client, s = await browse(ctx, bot, "screenshot")
             async with s.lock:
-                return Image(data=await s.screenshot(), format="png")
+                return Image(data=await s.screenshot(hide_personal=broker.hides_personal(client)), format="png")
 
     @mcp.tool(description="Sign in on the current page with a saved login. The user approves on their desktop; you never see the password. " + BOT + " " + REASON)
     async def fill_login(ctx: Context, bot: str, handle: str, reason: str = "") -> dict[str, Any]:

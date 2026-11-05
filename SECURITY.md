@@ -39,6 +39,8 @@ program can read your keyring and the broker's files directly.
 | The browser refuses this PC, private/LAN, CGNAT/tailnet and `.local`/`.ts.net` addresses for pages, every subresource and WebSockets. Service workers are blocked and WebRTC doesn't reveal LAN addresses | the model using the browser to reach your router, Syncthing, debug ports or other tailnet machines |
 | One-digit-per-box code fields treated as secret everywhere | 2FA digits showing up in snapshots and screenshots |
 | Usernames masked for the model (`a***@proton.me`) | your email landing in the assistant's chat history |
+| Personal details on pages (emails, phone, card and bank numbers) masked in what a bot reads and blacked out in its screenshots, unless you allow that bot | your details piling up in chat histories, which have leaked (indexed shared chats) |
+| Optional per-bot site list: page loads, clicks, popups and redirects outside the listed sites and the bot's login sites are refused and logged | a tricked bot sending page data to an attacker's URL through the broker's browser |
 | No JavaScript tool; snapshots never read sensitive fields; every output scrubbed of every secret seen (plain, URL-encoded in either case, JSON-, HTML- and base64-encoded, and codes split up as `482 913`) | a page that echoes your password, or a "show password" button |
 | Invisible characters (zero-width, text-direction controls, Unicode tag characters) removed from everything the bot gets and from approval notifications | instructions hidden in page text for the model ("ASCII smuggling"), a secret split by invisible characters to dodge scrubbing, a bot's reason that reads differently from what it says |
 | Playwright and Node debugging variables (`DEBUG`, `PWDEBUG`, `NODE_OPTIONS`, `PW_*`…) removed before the browser starts | every fill, password included, being logged to stderr or a file outside the scrubbed logs |
@@ -66,6 +68,10 @@ program can read your keyring and the broker's files directly.
   grants. Revoke is the real off switch.
 - **After you sign in, the assistant can use the account.** Hiding the password doesn't hide
   what's inside. Only put logins in the Agent vault that you'd let the assistant act in.
+- **Personal-detail masking is pattern matching.** Names, street addresses and unusual formats
+  get through, and so does anything shown only as an image.
+- **The site list covers the broker's browser only.** An assistant that can browse by itself (Grok
+  can) has its own way out; the list stops the broker's browser being that way.
 - **Decrypted text and returned unlock output go to the assistant** (and so to its provider) by
   design, when you approve it.
 - **Programs running as you** can read the agent token in your keyring, the broker's pass-cli

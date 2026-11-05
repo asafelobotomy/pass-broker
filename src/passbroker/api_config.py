@@ -21,11 +21,17 @@ def c_pair(a) -> dict[str, Any]:
 
 
 def c_bot_access(a) -> dict[str, Any]:
-    """Set one bot's access from JSON on stdin: logins, unlock, devices, keys, email_codes."""
+    """Set one bot's access from JSON on stdin: logins, unlock, devices, keys, email_codes,
+    personal_details, sites_limited and sites."""
     data = json.loads(sys.stdin.readline() or "{}")
     if not isinstance(data, dict):
         raise ops.OpError("access must be a JSON object")
-    ops.bots_store().set_access(a.name, data)
+    from .bots import BotError
+
+    try:
+        ops.bots_store().set_access(a.name, data)
+    except BotError as e:
+        raise ops.OpError(str(e)) from None
     return {"access": ops.bots_store().access(a.name)}
 
 

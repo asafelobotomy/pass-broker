@@ -20,6 +20,7 @@ from .files import FilesMixin
 from .fills import FillsMixin
 from .keys import KeyStore
 from .mailcode import MailMixin, MailSettings
+from .policy import PolicyMixin
 from .redact import Redactor, clean
 from .unlock import Unlockers
 from .vault import Backend, Login, VaultError
@@ -36,7 +37,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin):
+class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -68,6 +69,8 @@ class Broker(FillsMixin, FilesMixin, DevicesMixin, MailMixin):
         self.keys = keys
         self.devices = devices
         self.mail = mail
+        if browser is not None:
+            browser.site_allowed = self.site_allowed
 
     # ---- who may do what --------------------------------------------------------------
 

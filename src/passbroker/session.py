@@ -18,6 +18,7 @@ from playwright.async_api import BrowserContext, Frame, Locator, Page
 from playwright.async_api import TimeoutError as PWTimeout
 
 from .browser_js import SENSITIVE_CSS, SNAPSHOT_JS, VISIBLE_TEXT_JS
+from .pii import PERSONAL_FIELDS, SCREEN_TEXT
 from .redact import Redactor
 
 IS_SENSITIVE_JS = """el => {
@@ -33,8 +34,16 @@ class BrowserError(Exception):
 
 
 class Session:
-    def __init__(self, key: str, ctx: BrowserContext, redactor: Redactor, blocked: Callable[[str], Awaitable[bool]]) -> None:
+    def __init__(
+        self,
+        key: str,
+        ctx: BrowserContext,
+        redactor: Redactor,
+        blocked: Callable[[str], Awaitable[bool]],
+        site_allowed: Callable[[str], Awaitable[bool]] | None = None,
+    ) -> None:
         self.key = key
+        self._site_allowed = site_allowed
         self.ctx = ctx
         self._redactor = redactor
         self._blocked = blocked
@@ -75,13 +84,15 @@ class Session:
         host = urlsplit(url).hostname or ""
         if await self._blocked(host):
             raise BrowserError(f"blocked: {host or 'that address'} is on this PC, your LAN or your tailnet")
+        if self._site_allowed and not await self._site_allowed(host):
+            raise BrowserError(f"not allowed: {host} isn't on this bot's site list; ask the user to add it in Pass Broker")
         try:
             resp = await self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
         except PWTimeout:
             raise BrowserError("page took too long to load") from None
         except Exception as e:
             if "ERR_BLOCKED_BY_CLIENT" in str(e):
-                raise BrowserError("blocked: that page redirected to this PC, your LAN or your tailnet") from None
+                raise BrowserError("blocked: that page redirected to this PC, your LAN, your tailnet or a site not on this bot's list") from None
             raise
         return {"url": self.page.url, "status": resp.status if resp else None, "title": await self.page.title()}
 
@@ -137,11 +148,11 @@ class Session:
         await self.settle()
         return {"url": self.page.url}
 
-    async def screenshot(self) -> bytes:
+    async def screenshot(self, hide_personal: bool = True) -> bytes:
         self.touch()
-        return await self.masked_capture()
+        return await self.masked_capture(hide_personal=hide_personal)
 
-    async def masked_capture(self, jpeg_quality: int | None = None) -> bytes:
+    async def masked_capture(self, jpeg_quality: int | None = None, hide_personal: bool = False) -> bytes:
         """The tab with secret fields blacked out, refused while a secret shows as text.
 
         Doesn't count as use, so the live view never keeps an idle session signed in.
@@ -154,6 +165,9 @@ class Session:
             if self._redactor.contains_secret(text):
                 raise BrowserError("screenshot withheld: the page is showing a secret value as text")
         masks = [f.locator(SENSITIVE_CSS) for f in self.frames()]
+        if hide_personal:
+            for f in self.frames():
+                masks += [f.locator(PERSONAL_FIELDS), f.get_by_text(SCREEN_TEXT)]
         fmt: dict[str, Any] = {"type": "jpeg", "quality": jpeg_quality} if jpeg_quality else {}
         return await self.page.screenshot(mask=masks, mask_color="#000000", animations="disabled", caret="hide", **fmt)
 
