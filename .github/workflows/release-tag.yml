@@ -1,0 +1,64 @@
+name: Release on version bump
+
+# When main's version goes up (packaging/bump.sh, committed and pushed), tag it vX.Y.Z and
+# release it: the tag is made here, then appimage.yml is called to build, check and publish.
+# (A tag pushed with the workflow's own token doesn't start other workflows, so it's called
+# directly rather than left to the tag.) Nothing happens if that version is already tagged.
+on:
+  push:
+    branches: [main]
+    paths: [pyproject.toml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag a new version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # to push the tag
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Tag it, if the version is new
+        id: tag
+        run: |
+          v="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
+          rs="$(sed -n 's/^version = "\(.*\)"/\1/p' wizard/Cargo.toml | head -1)"
+          [ "$v" = "$rs" ] || { echo "::error::pyproject.toml says $v but wizard/Cargo.toml says $rs; use packaging/bump.sh"; exit 1; }
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "v$v is already tagged; nothing to release"
+            exit 0
+          fi
+          newest="$(git tag -l 'v[0-9]*' | sed 's/^v//' | sort -V | tail -1)"
+          if [ -n "$newest" ] && [ "$(printf '%s\n%s\n' "$newest" "$v" | sort -V | tail -1)" != "$v" ]; then
+            echo "::error::$v is older than the newest release, v$newest"
+            exit 1
+          fi
+          python3 packaging/release_notes.py "$v" > /dev/null  # CHANGELOG.md says what's in it
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$v" -m "Pass Broker $v" "$GITHUB_SHA"
+          git push origin "v$v"
+          echo "tag=v$v" >> "$GITHUB_OUTPUT"
+          echo "Tagged v$v"
+
+  release:
+    name: Build, check and publish
+    needs: tag
+    if: needs.tag.outputs.tag != ''
+    permissions:
+      contents: write # the called workflow's release job publishes
+    uses: ./.github/workflows/appimage.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}

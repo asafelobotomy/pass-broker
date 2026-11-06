@@ -32,6 +32,9 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
 - Fixed (found by a live smoke test): labelling mail failed on a real Bridge (the folder was opened
   read-only); making a label with a folder's name (or the other way round) now says Proton Mail
   needs different names; two live-view refreshes at once could collide on one temporary file.
+- **Releases on a version bump**: pushing a new version to main (`packaging/bump.sh`) tags it and
+  publishes the release by itself, with the version's CHANGELOG section as notes, after checking
+  the AppImage (version, glibc 2.35, licence list).
 - Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email

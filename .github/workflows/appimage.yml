@@ -2,10 +2,18 @@ name: AppImage
 
 # Built on the oldest supported Ubuntu, so the AppImage runs on any desktop Linux with
 # glibc 2.35 or newer (the bundled Python needs only 2.17; the wizard sets the floor).
-# Pull requests that touch what goes into it build it too. A v* tag builds it without caches,
-# checks the tag matches the version in the source, and drafts a GitHub release with the files.
+# Pull requests that touch what goes into it build it too. A release (a v* tag you push, or the
+# tag release-tag.yml makes when main's version goes up, which calls this with `tag`) builds it
+# without caches, checks the tag matches the version, checks the AppImage itself (verify.sh) and
+# publishes the release with that version's CHANGELOG section as its notes.
 on:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: The vX.Y.Z tag to build and release
+        type: string
+        required: true
   push:
     tags: ["v*"]
   pull_request:
@@ -21,8 +29,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: appimage-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+  group: appimage-${{ inputs.tag || github.ref }}
+  cancel-in-progress: ${{ !inputs.tag && github.ref_type != 'tag' }}
+
+env:
+  # The release being built, if any: from release-tag.yml, or a tag you pushed.
+  TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
 
 jobs:
   appimage:
@@ -31,11 +43,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || '' }}
           persist-credentials: false
       - name: The tag matches the version in the source
-        if: github.ref_type == 'tag'
+        if: env.TAG != ''
         run: |
-          want="${GITHUB_REF_NAME#v}"
+          want="${TAG#v}"
           py="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -1)"
           rs="$(sed -n 's/^version = "\(.*\)"/\1/p' wizard/Cargo.toml | head -1)"
           echo "tag $want, pyproject $py, wizard $rs"
@@ -49,7 +62,7 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        if: github.ref_type != 'tag' # a release is built from scratch
+        if: env.TAG == '' # a release is built from scratch
         with:
           workspaces: wizard
       - name: Build tools and the libraries the wizard links against
@@ -60,6 +73,12 @@ jobs:
         run: APPIMAGE_EXTRACT_AND_RUN=1 dist/Pass_Broker-x86_64.AppImage passbroker --help
       - name: Checksum
         run: cd dist && sha256sum Pass_Broker-x86_64.AppImage > Pass_Broker-x86_64.AppImage.sha256 && cat Pass_Broker-x86_64.AppImage.sha256
+      - name: Check the release (version, glibc 2.35, licences)
+        if: env.TAG != ''
+        run: packaging/appimage/verify.sh "${TAG#v}" dist
+      - name: Release notes from CHANGELOG.md
+        if: env.TAG != ''
+        run: python3 packaging/release_notes.py "${TAG#v}" > dist/release-notes.md
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Pass_Broker-x86_64.AppImage
@@ -67,12 +86,13 @@ jobs:
             dist/Pass_Broker-x86_64.AppImage
             dist/Pass_Broker-x86_64.AppImage.sha256
             dist/THIRD_PARTY_LICENSES
+            dist/release-notes.md
           if-no-files-found: error
 
   release:
-    name: Draft the release
+    name: Publish the release
     needs: appimage
-    if: github.ref_type == 'tag'
+    if: inputs.tag || github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
       contents: write # only this job can create the release
@@ -81,11 +101,17 @@ jobs:
         with:
           name: Pass_Broker-x86_64.AppImage
           path: dist
-      - name: Draft it (you add the notes and publish)
+      - name: Publish it, notes from CHANGELOG.md (or update one made before, on a rerun)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist && sha256sum -c Pass_Broker-x86_64.AppImage.sha256
-          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft --verify-tag \
-            --title "Pass Broker ${GITHUB_REF_NAME#v}" --notes "Release notes to come." \
-            Pass_Broker-x86_64.AppImage Pass_Broker-x86_64.AppImage.sha256 THIRD_PARTY_LICENSES
+          test -s release-notes.md
+          files=(Pass_Broker-x86_64.AppImage Pass_Broker-x86_64.AppImage.sha256 THIRD_PARTY_LICENSES)
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+            gh release edit "$TAG" -R "$GITHUB_REPOSITORY" --notes-file release-notes.md --draft=false --latest
+          else
+            gh release create "$TAG" -R "$GITHUB_REPOSITORY" --verify-tag --latest \
+              --title "Pass Broker ${TAG#v}" --notes-file release-notes.md "${files[@]}"
+          fi

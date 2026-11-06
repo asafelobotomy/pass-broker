@@ -4,8 +4,9 @@
 #     packaging/bump.sh 0.3.0
 #
 # Updates pyproject.toml and wizard/Cargo.toml, then their lock files (only Pass Broker's own
-# entry; no dependency changes). Then commit, tag vX.Y.Z and push the tag: the AppImage
-# workflow checks the tag matches and drafts the release.
+# entry; no dependency changes), and turns CHANGELOG.md's "## Unreleased" into "## X.Y.Z"
+# (those become the release notes). Then commit and push to main: the release-tag workflow
+# sees the new version, tags vX.Y.Z, builds the AppImage and publishes the release.
 set -euo pipefail
 
 NEW="${1:-}"
@@ -21,6 +22,17 @@ if git rev-parse -q --verify "refs/tags/v$NEW" >/dev/null; then
     exit 1
 fi
 
+# The release notes come from CHANGELOG.md: the version needs a section with something in it.
+if grep -q "^## $NEW\b" CHANGELOG.md; then
+    :
+elif grep -q "^## Unreleased" CHANGELOG.md; then
+    sed -i "0,/^## Unreleased[[:space:]]*$/s//## $NEW/" CHANGELOG.md
+else
+    echo "CHANGELOG.md needs a '## Unreleased' (or '## $NEW') section saying what changed" >&2
+    exit 1
+fi
+python3 packaging/release_notes.py "$NEW" >/dev/null
+
 # The first `version =` in each manifest is the package's own.
 sed -i "0,/^version = \".*\"/s//version = \"$NEW\"/" pyproject.toml wizard/Cargo.toml
 uv lock -q
@@ -29,4 +41,5 @@ uv lock -q
 for f in pyproject.toml wizard/Cargo.toml uv.lock wizard/Cargo.lock; do
     git diff --quiet -- "$f" && { echo "$f didn't change" >&2; exit 1; }
 done
-echo "$OLD -> $NEW in pyproject.toml, wizard/Cargo.toml, uv.lock and wizard/Cargo.lock"
+echo "$OLD -> $NEW in pyproject.toml, wizard/Cargo.toml, uv.lock, wizard/Cargo.lock and CHANGELOG.md"
+echo "Now commit and push to main; the release follows by itself."
