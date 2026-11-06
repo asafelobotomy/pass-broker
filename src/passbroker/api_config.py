@@ -47,14 +47,15 @@ def _store(kind: str):
 def c_config(a) -> dict[str, Any]:
     from dataclasses import asdict as _asdict
 
-    from . import accounts, botmail
+    from . import accounts, botmail, mailadmin
     from .mailcode import MailSettings
 
     mail = MailSettings.load(ops.dirs()[0] / "mail.json")
     bots = ops.bots_store().list()
     made = [{"bot": b["name"], **c} for b in bots for c in b.get("created", [])]
     emails = [{"bot": b["name"], **b["email"]} for b in bots if b.get("email")]
-    return {"keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
+    admin = mailadmin.load_state(ops.dirs()[0] / "mailadmin.json")
+    return {"mail_admin": {k: admin[k] for k in ("admin", "since", "trusted")}, "keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
             "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True), "emails": emails,
                          "rule_text": botmail.RULE}}
 
@@ -115,6 +116,25 @@ def c_accounts_rule(a) -> dict[str, Any]:
     return _asdict(s)
 
 
+def c_mail_admin(a) -> dict[str, Any]:
+    """Remove the mail admin (--remove) or set your trusted recipients (--trusted, comma separated)."""
+    from . import jsonfile, mailadmin
+    from .mailbox import MailboxError, addresses
+
+    path = ops.dirs()[0] / "mailadmin.json"
+    state = mailadmin.load_state(path)
+    if a.remove:
+        state.update(admin="", since="")
+    if a.trusted is not None:
+        try:
+            state["trusted"] = sorted({x.lower() for x in addresses(a.trusted)})[:50] if a.trusted.strip() else []
+        except MailboxError as e:
+            raise ops.OpError(str(e)) from None
+    if a.remove or a.trusted is not None:
+        jsonfile.write(path, state)
+    return {"admin": state["admin"], "since": state["since"], "trusted": state["trusted"]}
+
+
 def c_accounts_setup(a) -> dict[str, Any]:
     """Make the Bot Accounts vault and give the broker's agent editor access there (as you)."""
     from . import accounts
@@ -151,4 +171,5 @@ def add_parsers(add) -> None:
     add("config-add", c_config_add, (("kind",), {"choices": ["keys", "devices"]}))
     add("config-remove", c_config_remove, (("kind",), {"choices": ["keys", "devices"]}), (("name",), {}))
     add("mail-set", c_mail_set)
+    add("mail-admin", c_mail_admin, (("--remove",), {"action": "store_true"}), (("--trusted",), {"default": None}))
     add("mail-bots-folder", c_mail_bots_folder, (("--vault",), {"default": VAULT}))

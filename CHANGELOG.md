@@ -13,6 +13,10 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
   files every bot's mail into a **Bots** folder. A bot you mark as managing your mail is given the
   job (new `mail_tasks` and `mail_rule_done` tools); with none, the bot tells you, and the wizard's
   **Set up bot mail** makes the folder, copies the rule and opens Proton Mail's filters.
+- **A mail admin**: one bot you approve can look through, read, organise (move, archive, star,
+  label, spam, trash, folders), draft and send your mail through Bridge. Each send asks you unless
+  every recipient is trusted; nothing is erased for good; daily limits; Bridge's password stays with
+  the broker. Remove it, or set trusted recipients, in the Email codes tab.
 - Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email

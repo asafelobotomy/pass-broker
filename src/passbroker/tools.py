@@ -250,3 +250,7 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
     async def run_device_action(ctx: Context, bot: str, action: str, reason: str = "") -> dict[str, Any]:
         with errors():
             return safe(await broker.run_device_action(await who(ctx, bot, "device", action), action, reason))
+
+    from .tools_mail import register_mail_tools
+
+    register_mail_tools(mcp, broker, who, safe, errors)

@@ -58,7 +58,9 @@ class BotMailMixin:
         """Bots you marked as managing your mail (with access of their own), switched on."""
         if self.bots is None:
             return []
-        return [b["name"] for b in self.bots.list() if b.get("enabled", True) and b.get("access", {}).get("manages_mail")]
+        marked = [b["name"] for b in self.bots.list() if b.get("enabled", True) and b.get("access", {}).get("manages_mail")]
+        admin = self.mail_admin()  # the mail admin can make folders but not filters, so it goes last
+        return marked + ([admin] if admin and admin not in marked else [])
 
     def _set_rule(self: "Broker", state: str, by: str) -> None:
         from dataclasses import asdict

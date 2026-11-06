@@ -23,6 +23,7 @@ from .devices import DevicesMixin, DeviceStore
 from .files import FilesMixin
 from .fills import FillsMixin
 from .keys import KeyStore
+from .mailadmin import MailAdminMixin
 from .mailcode import MailMixin, MailSettings
 from .policy import PolicyMixin
 from .redact import Redactor, clean
@@ -42,7 +43,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -77,6 +78,8 @@ class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, FilesMixin, D
         self.mail = mail
         self.account_settings = account_settings  # re-read on use: set up without a restart
         self._fresh: dict[tuple[str, str], float] = {}
+        self.mail_admin_path: Path | None = None  # who the mail admin is (mailadmin.py)
+        self._mail_creds = None
         self.accounts_path: Path | None = None  # where the bot-mail rule's state is saved (botmail.py)
         self._alias_lock = asyncio.Lock()  # one email alias per bot, even when two calls race
         if browser is not None:

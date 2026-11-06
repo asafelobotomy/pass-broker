@@ -173,6 +173,9 @@ pub fn audit_row(e: &Value) -> AuditRow {
         "email_alias" => "email address made".into(),
         "mail_rule_asked" => format!("asked {}", s(&e["item"])),
         "mail_rule_done" => "bot-mail rule set up".into(),
+        "mail_admin_granted" => "now mail admin".into(),
+        "mail_send" => format!("to {}", s(&e["item"])),
+        "mail_move" | "mail_flag" | "mail_label" => format!("{} message(s)", s(&e["count"])),
         "list_logins" => format!("{} logins", s(&e["count"])),
         _ => String::new(),
     };

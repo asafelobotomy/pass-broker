@@ -397,6 +397,33 @@ Limits:
   you.
 - Each bot's alias counts once towards your Proton plan's alias limit.
 
+### A mail admin: one bot working in your mailbox
+
+A bot can ask to be your **mail admin** (`request_mail_admin`); you approve on your desktop, and
+only one bot holds it at a time (approving another replaces it). Through Proton Mail Bridge on this
+PC, the admin can:
+
+| | |
+|---|---|
+| Look | `mail_folders` (folders and labels, unread counts), `mail_search` (by sender, recipient, subject, words, date, unread, starred) |
+| Read | `mail_read` (as text, attachments listed; stays unread unless asked), `mail_attachment` (text attachments) |
+| Organise | `mail_move` (folders, Archive, Spam, back to the inbox, Trash), `mail_flag` (read, starred), `mail_label` |
+| Folders | `mail_folder_create`, `mail_folder_rename`, `mail_folder_delete` (asks you; Proton keeps the mail) |
+| Write | `mail_draft` (saved in Drafts for you), `mail_send` (new, reply, reply all, forward) |
+
+What stays yours:
+- **Every email it sends asks you first**, showing who it's to, the subject and how it starts,
+  unless every recipient is on your **Trusted recipients** list (Email codes tab). At most 20 a day.
+- **Nothing is erased for good**: deleting moves to Trash, and nothing empties it. Deleting a
+  folder asks you. At most 500 messages changed a day.
+- It never sees Bridge's password, and the audit log records each action without mail contents.
+- Mail is written by its senders, so everything it reads comes marked as untrusted data: an email
+  is the easiest way for a stranger to slip instructions to a bot.
+
+Bridge can't change filters, auto-replies, contacts or account settings, so neither can the admin
+(the bot-mail rule above still needs a bot with its own access, or you). Remove the admin in the
+**Email codes** tab whenever you like. It also gets the bot-mail jobs (`mail_tasks`).
+
 ### Per-bot access and sessions
 
 - Each bot gets **its own browser session** (cookies, tab, idle sign-out), so one bot can't use a

@@ -87,6 +87,16 @@ export component MailSection inherits VerticalLayout {
         Button { text: "Record Bridge's certificate again"; enabled: !Wiz.busy; clicked => { Wiz.mail-repin(); } }
     }
     if !Wiz.locked: Muted { text: "Only after reinstalling Bridge, and only on a network you trust: it replaces the certificate recorded the first time."; font-size: 12px; wrap: word-wrap; }
+    Section { text: "Mail admin"; }
+    Muted {
+        text: Wiz.mail-admin == "" ? "No bot works in your mailbox. A bot can ask (request_mail_admin); you approve on your desktop. Only one at a time." : Wiz.mail-admin + " is your mail admin (since " + Wiz.mail-admin-since + "): it can read and organise your mail and send email, each send with your Allow. It never sees Bridge's password.";
+        font-size: 12px;
+        wrap: word-wrap;
+    }
+    if Wiz.mail-admin != "" && !Wiz.locked: HorizontalLayout { alignment: start; Button { text: "Remove mail admin"; enabled: !Wiz.busy; clicked => { Wiz.mail-admin-remove(); } } }
+    Field { label: "Trusted recipients"; LineEdit { text <=> Wiz.mail-trusted; placeholder-text: "you@example.com, partner@example.com"; enabled: !Wiz.locked; } }
+    if !Wiz.locked: HorizontalLayout { alignment: start; Button { text: "Save trusted recipients"; enabled: !Wiz.busy; clicked => { Wiz.mail-trusted-save(); } } }
+    Muted { text: "The mail admin may send to these without asking you each time."; font-size: 12px; wrap: word-wrap; }
     Rectangle { vertical-stretch: 1; }
 }
 

@@ -142,6 +142,7 @@ def cmd_serve(args: argparse.Namespace) -> None:
     )
     broker.mail_path = config / "mail.json"
     broker.accounts_path = config / "accounts.json"
+    broker.mail_admin_path = config / "mailadmin.json"
     preview = Preview(browser, redactor, preview_dir())
     browser.on_signed_out = lambda key, reason: broker.audit.record("signed_out", client=key, reason=reason)
     clients_path = config / "clients.json"

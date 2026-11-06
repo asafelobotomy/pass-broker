@@ -125,6 +125,10 @@ pub fn refresh(app: &Shared, ui: &AppWindow) {
         g.set_mail_host(s(&v["mail"]["host"]).into());
         g.set_mail_port(v["mail"]["port"].as_i64().unwrap_or(1143) as i32);
         g.set_mail_age(v["mail"]["max_age_minutes"].as_i64().unwrap_or(10) as i32);
+        g.set_mail_admin(s(&v["mail_admin"]["admin"]).into());
+        g.set_mail_admin_since(s(&v["mail_admin"]["since"]).into());
+        let trusted: Vec<String> = v["mail_admin"]["trusted"].as_array().into_iter().flatten().map(s).collect();
+        g.set_mail_trusted(trusted.join(", ").into());
         let acc = &v["accounts"];
         g.set_acc_enabled(acc["enabled"].as_bool().unwrap_or(false));
         if !s(&acc["vault"]).is_empty() {
@@ -195,6 +199,27 @@ fn wire_accounts(app: &Shared, ui: &AppWindow) {
                 if let Err(e) = r {
                     wiz(ui).set_extras_note(e.into());
                 }
+                refresh(app, ui);
+            });
+        }
+    });
+    wiz(ui).on_mail_admin_remove({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || {
+            let Some(ui) = w.upgrade() else { return };
+            bg(&a, &ui, "Removing the mail admin…", |app| app.cli.call(&args(["mail-admin", "--remove"]), None), |ui, app, r| {
+                wiz(ui).set_extras_note(match r { Ok(_) => "No bot works in your mailbox now.".to_string(), Err(e) => e }.into());
+                refresh(app, ui);
+            });
+        }
+    });
+    wiz(ui).on_mail_trusted_save({
+        let (a, w) = (app.clone(), ui.as_weak());
+        move || {
+            let Some(ui) = w.upgrade() else { return };
+            let cmd = vec!["mail-admin".to_string(), "--trusted".into(), wiz(&ui).get_mail_trusted().to_string()];
+            bg(&a, &ui, "Saving…", move |app| app.cli.call(&cmd, None), |ui, app, r| {
+                wiz(ui).set_extras_note(match r { Ok(_) => "Trusted recipients saved.".to_string(), Err(e) => e }.into());
                 refresh(app, ui);
             });
         }

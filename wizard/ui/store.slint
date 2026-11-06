@@ -190,6 +190,11 @@ export global Wiz {
     callback device-remove(string);
     callback mail-save;
     callback mail-repin;
+    in property <string> mail-admin;  // the one bot working in your mailbox (mailadmin.py)
+    in property <string> mail-admin-since;
+    in-out property <string> mail-trusted;  // comma separated
+    callback mail-admin-remove;
+    callback mail-trusted-save;
     // bot-made accounts (a vault of their own)
     in property <bool> acc-enabled: false;
     in-out property <string> acc-vault: "Bot Accounts";
