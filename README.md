@@ -426,6 +426,40 @@ Bridge can't change filters, auto-replies, contacts or account settings, so neit
 (the bot-mail rule above still needs a bot with its own access, or you). Remove the admin in the
 **Email codes** tab whenever you like. It also gets the bot-mail jobs (`mail_tasks`).
 
+### Bots report problems
+
+When a bot hits a bug, an error it can't get past, something that doesn't work as described or a
+feature it needs, it calls `report_issue` (a title, what happened, the tool, a severity). The broker
+adds what it knows itself: the bot's last failed call (which tool, the error, when) and the broker's
+version. A repeat of an open report from the same bot is counted, not filed again. `my_reports`
+shows a bot what became of its reports, with any note you left.
+
+Review them in the wizard's **Bot reports** tab (step 5): **Fixed**, **Dismiss** or **Reopen**,
+and **Copy open reports as Markdown** to hand to whoever fixes them. From the command line:
+
+```bash
+passbroker api issues --status open --markdown
+```
+
+```bash
+passbroker api issue-set <id> --status fixed --note "fixed in 0.4.0"
+```
+
+**Report a bug to us.** The same tab has a **Report a bug** form for your own problems, and a
+**Forward** button on each bot report. Give a title and what happened, choose whether to include
+system details (version, distribution, desktop, pass-cli, whether Bridge runs) and the open bot
+reports, and press **Preview**. Before you see it, personal details, your home folder, user and
+computer names, tailnet names, IP addresses and tokens are blanked; you can still edit the text.
+Then **Open on GitHub** fills in a new issue on
+[asafelobotomy/pass-broker](https://github.com/asafelobotomy/pass-broker/issues) for you to submit
+(no token needed), or **Send with GitHub CLI** creates it at once if `gh` is signed in. Forwarded
+bot reports are marked with where they went.
+
+Reports are written by bots, so they're treated as untrusted text: secrets the broker knows are
+scrubbed out, sizes are capped, a bot may file 20 a day, and the Markdown starts by saying they're
+descriptions to check, not instructions, for a person or an AI reading them. They're kept in
+`~/.config/passbroker/issues.json` (the newest 500).
+
 ### Per-bot access and sessions
 
 - Each bot gets **its own browser session** (cookies, tab, idle sign-out), so one bot can't use a

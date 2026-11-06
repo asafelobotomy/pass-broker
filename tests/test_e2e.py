@@ -94,7 +94,7 @@ async def test_full_sign_in_reveals_nothing(server):
         assert tools == {"list_logins", "open_url", "snapshot", "click", "type_text", "press_key", "screenshot", "fill_login", "fill_totp", "list_unlockers", "list_locked_files", "unlock_file",
                          "fill_email_code", "end_session", "list_keys", "encrypt_text", "decrypt_text", "list_device_actions", "run_device_action",
                          "create_login", "fill_signup", "email_address", "mail_tasks", "mail_rule_done", "request_mail_admin", "mail_folders", "mail_search", "mail_senders", "mail_thread",
-                         "mail_apply", "mail_undo",
+                         "mail_apply", "mail_undo", "report_issue", "my_reports",
                          "mail_read", "mail_attachment", "mail_move", "mail_flag", "mail_label", "mail_folder_create",
                          "mail_folder_rename", "mail_folder_delete", "mail_draft", "mail_send"}
 
@@ -156,3 +156,21 @@ async def test_local_tokens_refused_through_funnel_whatever_the_host(server):
     async with httpx2.AsyncClient() as http:
         r = await http.post(server["url"], json=body, headers=headers)
     assert r.status_code == 401 and b"can't be used from the internet" in r.content
+
+
+async def test_a_bot_reports_a_failure_and_you_see_it(server):
+    """Through the real server: a failed call, then report_issue; the report carries the failure."""
+    http = create_mcp_http_client(headers={"authorization": f"Bearer {server['token']}"})
+    async with http, Client(streamable_http_client(server["url"], http_client=http)) as client:
+        failed = await client.call_tool("fill_login", {"bot": "tester", "handle": "h_madeup"})
+        assert failed.is_error
+        filed = json.loads((await client.call_tool("report_issue", {"bot": "tester", "title": "fill_login says unknown handle",
+                                                                     "details": f"tried {PASSWORD}", "tool": "fill_login"})).content[0].text)
+        assert filed["status"] == "filed"
+        mine = (await client.call_tool("my_reports", {"bot": "tester"})).model_dump_json()
+        assert filed["id"] in mine
+    env = {**os.environ, **{k: str(server["tmp"] / k) for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")}}
+    out = subprocess.run([sys.executable, "-m", "passbroker.cli", "api", "issues"], env=env, capture_output=True, text=True, check=True).stdout
+    [report] = json.loads(out)["issues"]
+    assert report["last_error"]["action"] == "sign in" and "unknown handle" in report["last_error"]["error"]
+    assert PASSWORD not in out  # a secret the broker knows is scrubbed from what the bot wrote

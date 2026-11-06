@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import time
 from typing import Any
 
@@ -28,6 +29,8 @@ REASON = "A short reason (the task), shown to the user when they approve."
 NEW_BOT_NOTICES_PER_HOUR = 10
 MAX_BOTS_PER_CONNECTION = 20
 CALLS_PER_10_MIN = 300
+# The bot and action of the tool call running now, so a failure can be remembered for report_issue.
+CURRENT: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar("current_call", default=None)
 
 
 def for_bot(redactor: Redactor, result: Any, hide_personal: bool) -> Any:
@@ -46,16 +49,24 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
     def safe(result: Any) -> Any:
         return redactor.scrub_obj(result)
 
+    def failed(message: str) -> str:
+        call = CURRENT.get()
+        if call is not None:
+            broker.note_error(call[0], call[1], message)
+        return message
+
     @contextlib.contextmanager
     def errors():
+        CURRENT.set(None)
         try:
             yield
         except (BrokerError, BrowserError) as e:
-            raise ToolError(redactor.scrub(str(e))) from None
-        except ToolError:
+            raise ToolError(failed(redactor.scrub(str(e)))) from None
+        except ToolError as e:
+            failed(str(e))
             raise
         except Exception as e:
-            raise ToolError(redactor.scrub(f"{type(e).__name__}: {e}")[:500]) from None
+            raise ToolError(failed(redactor.scrub(f"{type(e).__name__}: {e}")[:500])) from None
 
     async def who(ctx: Context, bot: str, action: str, site: str = "") -> str:
         """`connection/bot` for sessions, approvals and the log; refuses switched-off bots."""
@@ -79,6 +90,7 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
             if len(notices) < NEW_BOT_NOTICES_PER_HOUR:
                 notices.append(now)
                 oauth.notify("Pass Broker: a new bot", f"Bot: {name} (self-reported)\nConnection: {conn}\nIt can't use any logins until you grant them in Pass Broker.")
+        CURRENT.set((f"{conn}/{name}", action))
         return f"{conn}/{name}"
 
     async def page_site(client: str) -> str:
@@ -250,6 +262,21 @@ def register_tools(mcp: MCPServer, broker: Broker, redactor: Redactor, oauth: Br
     async def run_device_action(ctx: Context, bot: str, action: str, reason: str = "") -> dict[str, Any]:
         with errors():
             return safe(await broker.run_device_action(await who(ctx, bot, "device", action), action, reason))
+
+    @mcp.tool(description="Report a problem to the broker so the user can get it fixed: a bug, an error you can't get past, "
+              "something that doesn't work as described, or a feature you need. Say what you did, what you expected and what "
+              "happened. kind: bug, error, problem, request or other; severity: low, medium or high; tool: the tool involved. "
+              "Your last failed call is attached for you. Never put passwords or personal details in it. " + BOT)
+    async def report_issue(ctx: Context, bot: str, title: str, details: str = "", kind: str = "bug", severity: str = "medium",
+                           tool: str = "") -> dict[str, Any]:
+        with errors():
+            client = await who(ctx, bot, "report")
+            return safe(await broker.report_issue(client, title, details, kind, severity, tool))
+
+    @mcp.tool(description="The problems your bot reported, and whether the user fixed or dismissed them. " + BOT)
+    async def my_reports(ctx: Context, bot: str) -> list[dict[str, Any]]:
+        with errors():
+            return safe(await broker.my_reports(await who(ctx, bot, "reports")))
 
     from .tools_mail import register_mail_tools
 

@@ -53,6 +53,8 @@ user without ever showing you a password, passphrase or code.
 - When the task is done, call end_session to sign your browser out of everything.
 - Locked files: list_unlockers, list_locked_files, unlock_file. Encrypted text: list_keys,
   encrypt_text, decrypt_text. Home devices: list_device_actions, run_device_action.
+- Something broken, an error you can't get past, or a feature you need? report_issue tells the
+  user (your last failed call is attached); my_reports shows what became of your reports.
 Never type passwords or codes yourself; the typing tool refuses them. Secret fields show as
 "sensitive" in snapshots and are blacked out in screenshots. Do not try to work around this.
 """

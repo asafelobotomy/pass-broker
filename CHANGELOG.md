@@ -21,6 +21,14 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
   on a whole search) and `mail_undo` help it tidy, and search comes a page at a time.
 - Settings both the broker and the wizard write (the mail admin's, bot accounts) are changed under
   a lock, so neither can undo the other's change.
+- **Bots report problems**: `report_issue` files a bug, error, problem or feature request with
+  the bot's last failed call and the broker's version attached; repeats are merged; `my_reports`
+  shows a bot what happened to them. Review, close and copy them as Markdown in the new **Bot
+  reports** tab, or with `passbroker api issues` and `issue-set`.
+- **Report a bug**: send your own report, and any bots' reports, to Pass Broker's GitHub issues
+  from the Bot reports tab. You see (and can edit) exactly what goes, after personal details, home
+  folder, user and computer names, IPs and tokens are blanked; open it on GitHub to submit, or send
+  it with the GitHub CLI.
 - Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email

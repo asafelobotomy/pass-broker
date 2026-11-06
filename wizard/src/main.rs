@@ -7,6 +7,7 @@ mod broker_proc;
 mod extras_cb;
 mod live_cb;
 mod prefs;
+mod reports_cb;
 mod runner;
 mod preview;
 mod setup_cb;
@@ -111,6 +112,7 @@ fn main() -> Result<(), slint::PlatformError> {
         _ => {}
     }
     extras_cb::wire_extras(&app, &ui);
+    reports_cb::wire(&app, &ui);
     svc_mode::wire(&app, &ui);
     preview::wire(&app, &ui);
     svc_mode::poll(&app, &ui);

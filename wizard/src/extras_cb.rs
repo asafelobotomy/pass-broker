@@ -125,6 +125,7 @@ pub fn refresh(app: &Shared, ui: &AppWindow) {
         g.set_mail_host(s(&v["mail"]["host"]).into());
         g.set_mail_port(v["mail"]["port"].as_i64().unwrap_or(1143) as i32);
         g.set_mail_age(v["mail"]["max_age_minutes"].as_i64().unwrap_or(10) as i32);
+        crate::reports_cb::fill(ui, &v["issues"]);
         g.set_mail_admin(s(&v["mail_admin"]["admin"]).into());
         g.set_mail_admin_since(s(&v["mail_admin"]["since"]).into());
         let trusted: Vec<String> = v["mail_admin"]["trusted"].as_array().into_iter().flatten().map(s).collect();

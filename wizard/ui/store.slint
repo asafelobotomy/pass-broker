@@ -18,6 +18,7 @@ export struct AuditRow { ts: string, who: string, event: string, item: string, h
 export struct UnlockAction { name: string, tool: string, item: string, folders: string, output: string, returns: bool }
 
 export struct KeyRow { name: string, item: string, note: string }
+export struct ReportRow { id: string, title: string, line: string, detail: string, status: string, open: bool, forwarded: string }
 export struct DeviceRow { name: string, kind: string, target: string, item: string, returns: bool }
 export struct AccessItem { kind: string, label: string, name: string, on: bool }
 
@@ -194,6 +195,24 @@ export global Wiz {
     in property <string> mail-admin-since;
     in-out property <string> mail-trusted;  // comma separated
     callback mail-admin-remove;
+    // bots' reports (issues.py)
+    in property <[ReportRow]> reports;
+    in property <int> reports-open;
+    callback report-set(string, string);  // id, status
+    callback reports-copy;
+    callback report-forward(string);  // id: fill the bug form with that bot report
+    // Report a bug to the developers (bugreport.py)
+    in-out property <string> bug-title;
+    in-out property <string> bug-desc;
+    in-out property <bool> bug-system: true;
+    in-out property <bool> bug-include-open: false;
+    in-out property <string> bug-body;  // the cleaned report, after Preview; you may edit it
+    in-out property <string> bug-ids;  // bot reports going with it, comma separated
+    in property <bool> bug-gh: false;  // the GitHub CLI is installed and signed in
+    callback bug-preview;
+    callback bug-open;
+    callback bug-send;
+    callback bug-cancel;
     callback mail-trusted-save;
     // bot-made accounts (a vault of their own)
     in property <bool> acc-enabled: false;

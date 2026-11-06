@@ -22,6 +22,7 @@ from .browser import Browser
 from .devices import DevicesMixin, DeviceStore
 from .files import FilesMixin
 from .fills import FillsMixin
+from .issues import IssuesMixin, IssueStore
 from .keys import KeyStore
 from .mailadmin import MailAdminMixin
 from .mailbox import Pool
@@ -45,7 +46,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixin, MailWorkMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixin, MailWorkMixin, IssuesMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -82,6 +83,8 @@ class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixi
         self._fresh: dict[tuple[str, str], float] = {}
         self.mail_admin_path: Path | None = None  # who the mail admin is (mailadmin.py)
         self._mail_creds = None
+        self.issues: IssueStore | None = None  # bots' reports (issues.py)
+        self.last_errors: dict[str, dict[str, str]] = {}
         self._mail_pool = Pool()  # one Bridge connection for the mail admin's calls
         self._creds_lock = asyncio.Lock()
         self._mail_undo: list[list[dict[str, str]]] = []

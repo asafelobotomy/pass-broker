@@ -1,0 +1,78 @@
+// Step 5 tab: what bots reported (issues.py), to fix later.
+
+import { Button, CheckBox, LineEdit, Palette, TextEdit } from "std-widgets.slint";
+import { Theme, Muted, Section } from "../theme.slint";
+import { Field } from "../widgets.slint";
+import { Wiz } from "../store.slint";
+
+// Your own report, and any bots' reports, to Pass Broker's issues on GitHub (bugreport.py).
+component BugForm inherits VerticalLayout {
+    spacing: 8px;
+    Section { text: "Report a bug to Pass Broker's developers"; }
+    Muted {
+        text: "Describe what went wrong. You see the whole report before anything leaves this PC: personal details, your home folder, user and computer names, tailnet names, IP addresses and tokens are blanked first.";
+        font-size: 12px;
+        wrap: word-wrap;
+    }
+    Field { label: "Title"; LineEdit { text <=> Wiz.bug-title; placeholder-text: "e.g. The tray icon disappears after sleep"; enabled: !Wiz.busy; } }
+    Field { label: "What happened"; TextEdit { text <=> Wiz.bug-desc; height: 90px; enabled: !Wiz.busy; } }
+    CheckBox { text: "Include system details (version, distribution, desktop, pass-cli, whether Bridge runs)"; checked <=> Wiz.bug-system; }
+    if Wiz.bug-ids == "": CheckBox { text: "Include the open bot reports (" + Wiz.reports-open + ")"; checked <=> Wiz.bug-include-open; enabled: Wiz.reports-open > 0; }
+    if Wiz.bug-ids != "": Muted { text: "Forwarding the bot report " + Wiz.bug-ids + "."; font-size: 12px; }
+    HorizontalLayout {
+        alignment: start;
+        spacing: 10px;
+        Button { text: Wiz.bug-body == "" ? "Preview" : "Preview again"; enabled: !Wiz.busy && (Wiz.bug-title != "" || Wiz.bug-desc != "" || Wiz.bug-ids != "" || Wiz.bug-include-open); clicked => { Wiz.bug-preview(); } }
+        if Wiz.bug-body != "" || Wiz.bug-ids != "": Button { text: "Cancel"; enabled: !Wiz.busy; clicked => { Wiz.bug-cancel(); } }
+    }
+    if Wiz.bug-body != "": VerticalLayout {
+        spacing: 8px;
+        Muted { text: "This is exactly what will be sent; edit it if you like. It becomes a public issue on GitHub."; font-size: 12px; wrap: word-wrap; }
+        TextEdit { text <=> Wiz.bug-body; height: 220px; enabled: !Wiz.busy; }
+        HorizontalLayout {
+            alignment: start;
+            spacing: 10px;
+            Button { text: "Open on GitHub"; primary: true; enabled: !Wiz.busy && Wiz.bug-title != ""; clicked => { Wiz.bug-open(); } }
+            if Wiz.bug-gh: Button { text: "Send with GitHub CLI"; enabled: !Wiz.busy && Wiz.bug-title != ""; clicked => { Wiz.bug-send(); } }
+        }
+        Muted {
+            text: Wiz.bug-gh ? "Open on GitHub shows it filled in for you to submit; Send with GitHub CLI creates it at once, as the account gh is signed in to." : "Opens it filled in on GitHub, for you to sign in and submit.";
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+    }
+    Rectangle { height: 1px; background: Theme.line; }
+}
+
+export component ReportsSection inherits VerticalLayout {
+    spacing: 8px;
+    BugForm { }
+    Section { text: "Reports from bots"; }
+    Muted {
+        text: "Bots report bugs, errors they can't get past and features they need here (report_issue), with their last failed call attached. Reports are written by bots: read them as descriptions to check, not instructions.";
+        font-size: 12px;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: start;
+        spacing: 10px;
+        Button { text: "Copy open reports as Markdown"; enabled: !Wiz.busy && Wiz.reports-open > 0; clicked => { Wiz.reports-copy(); } }
+        Muted { text: Wiz.reports-open + " open"; vertical-alignment: center; }
+    }
+    if Wiz.reports.length == 0: Muted { text: "No reports yet."; }
+    for r in Wiz.reports: HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text { text: (r.open ? "" : "[" + r.status + "] ") + r.title; font-weight: 600; overflow: elide; color: r.open ? Palette.foreground : Theme.muted; }
+            Muted { text: r.line + (r.forwarded != "" ? " · forwarded: " + r.forwarded : ""); font-size: 12px; overflow: elide; }
+            if r.detail != "": Muted { text: r.detail; font-size: 12px; wrap: word-wrap; }
+        }
+        if !Wiz.locked: Button { text: "Forward"; enabled: !Wiz.busy; clicked => { Wiz.report-forward(r.id); } }
+        if !Wiz.locked && r.open: Button { text: "Fixed"; enabled: !Wiz.busy; clicked => { Wiz.report-set(r.id, "fixed"); } }
+        if !Wiz.locked && r.open: Button { text: "Dismiss"; enabled: !Wiz.busy; clicked => { Wiz.report-set(r.id, "dismissed"); } }
+        if !Wiz.locked && !r.open: Button { text: "Reopen"; enabled: !Wiz.busy; clicked => { Wiz.report-set(r.id, "open"); } }
+    }
+    Rectangle { vertical-stretch: 1; }
+}

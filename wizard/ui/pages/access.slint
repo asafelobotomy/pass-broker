@@ -2,6 +2,7 @@
 
 import { Button, LineEdit, CheckBox, ComboBox, SpinBox, Switch, ListView, Palette, TabWidget, ScrollView } from "std-widgets.slint";
 import { KeysSection, DevicesSection, MailSection, AccountsSection } from "extras.slint";
+import { ReportsSection } from "reports.slint";
 import { Theme, Muted, Heading, Section, Card, Badge } from "../theme.slint";
 import { CheckLine, Field, LockBar, LogView, BotLine } from "../widgets.slint";
 import { Wiz } from "../store.slint";
@@ -97,6 +98,7 @@ export component UnlockPage inherits VerticalLayout {
             Tab { title: "Home devices"; ScrollView { VerticalLayout { padding: 8px; DevicesSection { } } } }
             Tab { title: "Email codes"; ScrollView { VerticalLayout { padding: 8px; MailSection { } } } }
             Tab { title: "Bot accounts"; ScrollView { VerticalLayout { padding: 8px; AccountsSection { } } } }
+            Tab { title: "Bot reports"; ScrollView { VerticalLayout { padding: 8px; ReportsSection { } } } }
         }
         if Wiz.extras-note != "": Muted { text: Wiz.extras-note; font-size: 12px; }
     }

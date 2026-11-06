@@ -48,6 +48,7 @@ def c_config(a) -> dict[str, Any]:
     from dataclasses import asdict as _asdict
 
     from . import accounts, botmail, mailadmin
+    from .issues import IssueStore
     from .mailcode import MailSettings
 
     mail = MailSettings.load(ops.dirs()[0] / "mail.json")
@@ -55,7 +56,8 @@ def c_config(a) -> dict[str, Any]:
     made = [{"bot": b["name"], **c} for b in bots for c in b.get("created", [])]
     emails = [{"bot": b["name"], **b["email"]} for b in bots if b.get("email")]
     admin = mailadmin.load_state(ops.dirs()[0] / "mailadmin.json")
-    return {"mail_admin": {k: admin[k] for k in ("admin", "since", "trusted")}, "keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
+    reports = [{**i, "details": str(i.get("details", ""))[:300]} for i in IssueStore(ops.dirs()[0] / "issues.json").list()[:100]]
+    return {"issues": reports, "mail_admin": {k: admin[k] for k in ("admin", "since", "trusted")}, "keys": [_asdict(k) for k in _store("keys").load()], "devices": [_asdict(d) for d in _store("devices").load()], "mail": _asdict(mail),
             "accounts": {**_asdict(accounts.load()), "created": sorted(made, key=lambda c: c.get("at", ""), reverse=True), "emails": emails,
                          "rule_text": botmail.RULE}}
 
@@ -141,6 +143,56 @@ def c_mail_admin(a) -> dict[str, Any]:
     return {"admin": state["admin"], "since": state["since"], "trusted": state["trusted"]}
 
 
+def c_issues(a) -> dict[str, Any]:
+    """Bots' reports, newest first (--status open|fixed|dismissed), or as Markdown (--markdown)."""
+    from .issues import IssueStore, markdown
+
+    items = IssueStore(ops.dirs()[0] / "issues.json").list(a.status or "")
+    return {"markdown": markdown(items)} if a.markdown else {"issues": items}
+
+
+def c_issue_set(a) -> dict[str, Any]:
+    """Mark a report fixed, dismissed or open again, with an optional note the bot sees."""
+    from .issues import IssueStore
+
+    try:
+        return IssueStore(ops.dirs()[0] / "issues.json").set_status(a.id, a.status, a.note)
+    except ValueError as e:
+        raise ops.OpError(str(e)) from None
+
+
+def c_bug_report(a) -> dict[str, Any]:
+    """Report a bug to Pass Broker's developers, as JSON on stdin with `action`:
+    preview (title, description, issues: ids or "open", system) gives the cleaned title and body;
+    link (title, body) gives the new-issue link; send (title, body, issues) creates the issue with
+    the GitHub CLI; opened (issues) notes reports you opened on GitHub yourself."""
+    from . import bugreport
+    from .issues import IssueStore
+
+    data = json.loads(sys.stdin.readline() or "{}")
+    store = IssueStore(ops.dirs()[0] / "issues.json")
+    wanted = data.get("issues") or []
+    picked = store.list("open") if wanted == "open" else [i for i in store.list() if i["id"] in set(wanted)]
+    ids = [i["id"] for i in picked]
+    action = data.get("action", "preview")
+    title, body = str(data.get("title", "")), str(data.get("body", ""))
+    try:
+        if action == "preview":
+            return {**bugreport.build(title, str(data.get("description", "")), picked, bool(data.get("system", True))), "issues": ids}
+        if action == "link":
+            return bugreport.link(title, body)
+        if action == "send":
+            url = bugreport.send(title, body)
+            store.mark_forwarded(ids, url)
+            return {"url": url, "issues": ids}
+        if action == "opened":
+            store.mark_forwarded(ids, "opened on GitHub")
+            return {"issues": ids}
+    except ValueError as e:
+        raise ops.OpError(str(e)) from None
+    raise ops.OpError("action: preview, link, send or opened")
+
+
 def c_accounts_setup(a) -> dict[str, Any]:
     """Make the Bot Accounts vault and give the broker's agent editor access there (as you)."""
     from . import accounts
@@ -174,5 +226,10 @@ def add_parsers(add) -> None:
     add("config-add", c_config_add, (("kind",), {"choices": ["keys", "devices"]}))
     add("config-remove", c_config_remove, (("kind",), {"choices": ["keys", "devices"]}), (("name",), {}))
     add("mail-set", c_mail_set)
+    add("issues", c_issues, (("--status",), {"default": "", "choices": ["", "open", "fixed", "dismissed"]}),
+        (("--markdown",), {"action": "store_true"}))
+    add("bug-report", c_bug_report)
+    add("issue-set", c_issue_set, (("id",), {}), (("--status",), {"required": True, "choices": ["open", "fixed", "dismissed"]}),
+        (("--note",), {"default": ""}))
     add("mail-admin", c_mail_admin, (("--remove",), {"action": "store_true"}), (("--trusted",), {"default": None}))
     add("mail-bots-folder", c_mail_bots_folder, (("--vault",), {"default": VAULT}))
