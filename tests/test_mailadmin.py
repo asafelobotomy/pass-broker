@@ -114,6 +114,8 @@ async def test_organise(setup):
     assert server.folders["Labels/Family"] == []
     made = await broker.mail_folder_create(me, "Receipts")
     assert made["name"] == "Folders/Receipts"
+    with pytest.raises(BrokerError, match="different names"):  # Proton refuses a label named like a folder
+        await broker.mail_folder_create(me, "Receipts", kind="label")
     await broker.mail_move(me, [sale], "Folders/Receipts")
     assert server.raws("Folders/Receipts") and len(server.folders["INBOX"]) == 1
     await broker.mail_folder_rename(me, "Folders/Receipts", "Shopping")

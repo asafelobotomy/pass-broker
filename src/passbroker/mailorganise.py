@@ -66,7 +66,7 @@ class OrganiseMixin:
             raise MailboxError(f"no label called {name[:60]} (mail_folder_create with kind=label makes one)")
         done, missing, mids = 0, [], []
         for folder, uids in by_folder(ids).items():
-            self._select(folder)  # COPY and reading Message-IDs both work read-only
+            self._select(folder, write=on)  # Bridge refuses COPY from a folder opened read-only
             found = self.existing(uids)
             missing += [f"{folder}#{u}" for u in uids if u not in found]
             if not found:
@@ -114,7 +114,11 @@ class OrganiseMixin:
         if not NAME_RE.fullmatch(name) or name.strip() != name:
             raise MailboxError("name: up to 60 letters, digits, spaces and . & ( ) ' + , - _")
         full = ("Labels/" if kind == "label" else "Folders/") + name
+        other = ("Folders/" if kind == "label" else "Labels/") + name
         if full not in self.folder_names():
+            if other in self.folder_names():  # Proton Mail refuses a folder and a label of one name
+                raise MailboxError(f"there's already a {'folder' if kind == 'label' else 'label'} called {name[:60]}; "
+                                   "Proton Mail needs folders and labels to have different names")
             check(*self.i.create(quote(full)), f"making {full}")
             self._forget_folders()
         return full

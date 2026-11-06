@@ -46,13 +46,19 @@ def frame_name(key: str) -> str:
 
 
 def _write(path: Path, data: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    """Atomically, through a temporary file of its own: two writers of one path can't collide."""
+    import tempfile
+
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")  # 0600
     try:
         os.write(fd, data)
-    finally:
         os.close(fd)
-    os.replace(tmp, path)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 class Preview:
@@ -62,6 +68,7 @@ class Preview:
         self._folder = folder
         self._task: asyncio.Task | None = None
         self._last: dict[str, dict[str, Any]] = {}
+        self._ticking = asyncio.Lock()  # one refresh at a time, however it was started
 
     async def start(self) -> None:
         if self._folder is None:
@@ -104,6 +111,10 @@ class Preview:
                 log.debug("preview: %s", e)
 
     async def tick(self) -> None:
+        async with self._ticking:
+            await self._tick()
+
+    async def _tick(self) -> None:
         assert self._folder is not None
         if not self.watching():
             if self._last or (self._folder / INDEX).exists():

@@ -29,6 +29,9 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
   from the Bot reports tab. You see (and can edit) exactly what goes, after personal details, home
   folder, user and computer names, IPs and tokens are blanked; open it on GitHub to submit, or send
   it with the GitHub CLI.
+- Fixed (found by a live smoke test): labelling mail failed on a real Bridge (the folder was opened
+  read-only); making a label with a folder's name (or the other way round) now says Proton Mail
+  needs different names; two live-view refreshes at once could collide on one temporary file.
 - Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email

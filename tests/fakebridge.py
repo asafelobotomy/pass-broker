@@ -145,7 +145,7 @@ class FakeBridge:
         elif cmd in ("EXAMINE", "SELECT"):
             if args[0] not in self.folders:
                 return send(f"{tag} NO no such folder\r\n")
-            io["box"] = args[0]
+            io["box"], io["readonly"] = args[0], cmd == "EXAMINE"
             mode = "READ-ONLY" if cmd == "EXAMINE" else "READ-WRITE"
             send(f"* {len(self.folders[args[0]])} EXISTS\r\n{tag} OK [{mode}] done\r\n")
         elif cmd == "CREATE":
@@ -188,6 +188,8 @@ class FakeBridge:
     def _uid(self, io, tag, sub, args, send):
         box = self.folders[io["box"]]
         ok = f"{tag} OK done\r\n"
+        if io.get("readonly") and sub in ("MOVE", "COPY", "STORE", "EXPUNGE"):  # as Bridge does
+            return send(f"{tag} NO the mailbox is read-only\r\n")
         find = lambda ids: [m for m in box if str(m["uid"]) in ids.split(",")]  # noqa: E731
         if sub == "SEARCH":
             hits = list(box)
