@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from passbroker import mailadmin, mailbox
+from passbroker import mailadmin, mailorganise
 from passbroker.approvals import GrantCache, StaticApprover
 from passbroker.audit import AuditLog
 from passbroker.bots import Bots
@@ -36,11 +36,11 @@ INBOX = [
 ]
 
 
-@pytest.fixture
-def setup(tmp_path, monkeypatch):
+def mail_setup(tmp_path, monkeypatch):
+    """A broker, a fake Bridge with a small mailbox, an approver and the bots (shared with test_mailwork)."""
     key, cert = _self_signed(tmp_path, "bridge")
     server = FakeBridge(key, cert, {"INBOX": INBOX, "Archive": [], "Trash": [], "Drafts": [], "Sent": [], "Labels/Family": []})
-    monkeypatch.setattr(mailbox, "SMTP_PORT", server.smtp_port)
+    monkeypatch.setattr(mailorganise, "SMTP_PORT", server.smtp_port)
     vault = tmp_path / "vault.json"
     vault.write_text(json.dumps([{"title": "Bridge", "urls": [], "username": "me@proton.me", "password": PASSWORD}]))
     r = Redactor()
@@ -55,6 +55,11 @@ def setup(tmp_path, monkeypatch):
     server.close()
     log = (tmp_path / "audit.jsonl").read_text()
     assert PASSWORD not in log and "Dinner on Friday" not in log  # no password, no mail contents
+
+
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    yield from mail_setup(tmp_path, monkeypatch)
 
 
 async def admin(broker, bot="mailbot"):

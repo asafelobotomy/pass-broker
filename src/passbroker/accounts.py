@@ -60,6 +60,18 @@ def load(path: Path | None = None) -> AccountSettings:
         return AccountSettings()
 
 
+def change(fields: dict[str, Any], path: Path | None = None) -> AccountSettings:
+    """Set some fields under the file's lock, keeping whatever else the broker or wizard wrote."""
+    def apply(data: Any) -> dict[str, Any]:
+        try:
+            current = jsonfile.build(AccountSettings, data if isinstance(data, dict) else {})
+        except (ValueError, TypeError):
+            current = AccountSettings()
+        return {**asdict(current), **fields}
+
+    return jsonfile.build(AccountSettings, jsonfile.update(path or settings_path(), apply, {}))
+
+
 AGENT_LINE = re.compile(r"^- \[([^\]]+)\]: (.+?) \(expires", re.M)
 GRANT_LINE = re.compile(r"^- \[([^\]]+)\] (.+?) \| Type=Vault \| Role=(\w+)", re.M)
 
@@ -115,7 +127,7 @@ def setup(vault: str, agent: str, main_vault: str, pass_cli: str = "pass-cli", s
         run(["vault", "create", "--name", vault], f"creating the {vault} vault")
     if not sees(vault, pass_cli):
         _grant_the_brokers_agent(run, sees, agent, vault, main_vault, pass_cli)
-    jsonfile.write(settings_path(), asdict(AccountSettings(**{**asdict(load()), "vault": vault, "enabled": True})))
+    change({"vault": vault, "enabled": True})
     return {"vault": vault, "enabled": True}
 
 

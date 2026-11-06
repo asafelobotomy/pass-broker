@@ -108,12 +108,11 @@ def c_accounts_rule(a) -> dict[str, Any]:
     import time
     from dataclasses import asdict as _asdict
 
-    from . import accounts, jsonfile
+    from . import accounts
 
-    s = accounts.load()
-    s.rule, s.rule_by, s.rule_at = ("done", "you", time.strftime("%Y-%m-%d %H:%M")) if a.state == "done" else ("", "", "")
-    jsonfile.write(accounts.settings_path(), _asdict(s))
-    return _asdict(s)
+    done = a.state == "done"
+    return _asdict(accounts.change({"rule": "done" if done else "", "rule_by": "you" if done else "",
+                                    "rule_at": time.strftime("%Y-%m-%d %H:%M") if done else ""}))
 
 
 def c_mail_admin(a) -> dict[str, Any]:
@@ -122,16 +121,23 @@ def c_mail_admin(a) -> dict[str, Any]:
     from .mailbox import MailboxError, addresses
 
     path = ops.dirs()[0] / "mailadmin.json"
-    state = mailadmin.load_state(path)
-    if a.remove:
-        state.update(admin="", since="")
+    trusted = None
     if a.trusted is not None:
         try:
-            state["trusted"] = sorted({x.lower() for x in addresses(a.trusted)})[:50] if a.trusted.strip() else []
+            trusted = sorted({x.lower() for x in addresses(a.trusted)})[:50] if a.trusted.strip() else []
         except MailboxError as e:
             raise ops.OpError(str(e)) from None
-    if a.remove or a.trusted is not None:
-        jsonfile.write(path, state)
+
+    def apply(data: Any) -> dict[str, Any]:
+        state = mailadmin.load_state(None) | (data if isinstance(data, dict) else {})
+        if a.remove:
+            state.update(admin="", since="")
+        if trusted is not None:
+            state["trusted"] = trusted
+        return state
+
+    # Under the file's lock: the broker counts sends and changes in the same file.
+    state = jsonfile.update(path, apply, {}) if a.remove or trusted is not None else mailadmin.load_state(path)
     return {"admin": state["admin"], "since": state["since"], "trusted": state["trusted"]}
 
 
@@ -150,12 +156,9 @@ def c_accounts_off(a) -> dict[str, Any]:
     """Stop bots making accounts. The vault, its logins and the agent's access stay (remove them in Proton Pass)."""
     from dataclasses import asdict as _asdict
 
-    from . import accounts, jsonfile
+    from . import accounts
 
-    s = accounts.load()
-    s.enabled = False
-    jsonfile.write(accounts.settings_path(), _asdict(s))
-    return _asdict(s)
+    return _asdict(accounts.change({"enabled": False}))
 
 
 def add_parsers(add) -> None:

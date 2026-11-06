@@ -24,7 +24,9 @@ from .files import FilesMixin
 from .fills import FillsMixin
 from .keys import KeyStore
 from .mailadmin import MailAdminMixin
+from .mailbox import Pool
 from .mailcode import MailMixin, MailSettings
+from .mailwork import MailWorkMixin
 from .policy import PolicyMixin
 from .redact import Redactor, clean
 from .signup import SignupMixin
@@ -43,7 +45,7 @@ def plain(text: str, limit: int = 120) -> str:
     return re.sub(r"[\x00-\x1f\x7f<>&]", " ", clean(text or "")).strip()[:limit]
 
 
-class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
+class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixin, MailWorkMixin, FilesMixin, DevicesMixin, MailMixin, PolicyMixin):
     def __init__(
         self,
         backend: Backend,
@@ -80,6 +82,9 @@ class Broker(FillsMixin, AccountsMixin, SignupMixin, BotMailMixin, MailAdminMixi
         self._fresh: dict[tuple[str, str], float] = {}
         self.mail_admin_path: Path | None = None  # who the mail admin is (mailadmin.py)
         self._mail_creds = None
+        self._mail_pool = Pool()  # one Bridge connection for the mail admin's calls
+        self._creds_lock = asyncio.Lock()
+        self._mail_undo: list[list[dict[str, str]]] = []
         self.accounts_path: Path | None = None  # where the bot-mail rule's state is saved (botmail.py)
         self._alias_lock = asyncio.Lock()  # one email alias per bot, even when two calls race
         if browser is not None:

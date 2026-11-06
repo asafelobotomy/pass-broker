@@ -16,7 +16,11 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
 - **A mail admin**: one bot you approve can look through, read, organise (move, archive, star,
   label, spam, trash, folders), draft and send your mail through Bridge. Each send asks you unless
   every recipient is trusted; nothing is erased for good; daily limits; Bridge's password stays with
-  the broker. Remove it, or set trusted recipients, in the Email codes tab.
+  the broker. Remove it, or set trusted recipients, in the Email codes tab. Its tools share one
+  Bridge connection and work a folder at a time; `mail_senders`, `mail_thread`, `mail_apply` (act
+  on a whole search) and `mail_undo` help it tidy, and search comes a page at a time.
+- Settings both the broker and the wizard write (the mail admin's, bot accounts) are changed under
+  a lock, so neither can undo the other's change.
 - Email codes are found in any folder, not only the inbox (filters may file them away).
 - `fill_signup` fills every account field: username, email and confirm-email, password and
   confirm-password, leaving the bot's own fields alone, and handles forms that ask for the email

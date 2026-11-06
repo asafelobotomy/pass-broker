@@ -69,8 +69,9 @@ class BotMailMixin:
 
         s = self._accounts()
         s.rule, s.rule_by, s.rule_at = state, by, time.strftime("%Y-%m-%d %H:%M")
-        if self.accounts_path is not None:
-            jsonfile.write(self.accounts_path, asdict(s))
+        if self.accounts_path is not None:  # only these three fields: the wizard may be turning accounts off
+            fields = {"rule": s.rule, "rule_by": s.rule_by, "rule_at": s.rule_at}
+            jsonfile.update(self.accounts_path, lambda data: {**(data if isinstance(data, dict) else asdict(s)), **fields}, {})
 
     def mail_rule_guidance(self: "Broker", bot: str) -> dict[str, Any]:
         """What a bot that just got (or asked for) its alias should know about the bot-mail rule."""

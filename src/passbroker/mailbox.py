@@ -5,9 +5,12 @@ Nothing here decides who may do what: mailadmin.py checks the bot, asks you and 
 
 A message is named `folder#uid`. Proton keeps a message in one folder plus any number of labels;
 Bridge shows folders under `Folders/`, labels under `Labels/`, and the system folders (INBOX,
-Archive, Sent, Drafts, Spam, Trash, All Mail, Starred) by name. Moving copies nothing: a message
-leaves its folder. Labelling copies it into `Labels/<name>`; unlabelling removes it from there.
-Nothing is ever erased for good: "delete" means move to Trash, and Trash is never emptied.
+Archive, Sent, Drafts, Spam, Trash, All Mail, Starred) by name. Changing mail is in
+mailorganise.py.
+
+One connection serves the admin's calls (Pool): opening one costs a TLS handshake and a login, and
+the list of folders (often a hundred or more) is kept for FOLDERS_S. imaplib isn't thread-safe,
+so calls take turns on it; a connection that dropped is replaced once, transparently.
 """
 
 from __future__ import annotations
@@ -17,9 +20,10 @@ import email.policy
 import html
 import imaplib
 import re
-import smtplib
+import threading
 import time
-from dataclasses import dataclass
+from collections import Counter
+from collections.abc import Callable
 from email.message import EmailMessage, Message
 from email.utils import (
     formatdate,
@@ -30,45 +34,19 @@ from email.utils import (
 )
 from typing import Any
 
+from .mailbase import MAX_TEXT, SYSTEM, Creds, MailboxError, check, quote, split_id
 from .mailcode import MailSettings
+from .mailorganise import OrganiseMixin
 
-SYSTEM = ("INBOX", "Archive", "Sent", "Drafts", "Spam", "Trash", "All Mail", "Starred")
-SMTP_PORT = 1025  # Bridge's SMTP, next to its IMAP on 1143
-MAX_TEXT = 20_000
+__all__ = ["Creds", "Mailbox", "MailboxError", "Pool", "addresses", "compose", "text_of"]
 MAX_RESULTS = 50
-NAME_RE = re.compile(r"[\w .&()'+,-]{1,60}")  # a folder or label name you'd type in Proton Mail
+FOLDERS_S = 30  # the folder list is read again after this (you may add folders in Proton Mail)
+IDLE_S = 120  # an unused connection is closed after this
+CHECK_S = 20  # a connection unused this long is checked (NOOP) before use
 
 
-class MailboxError(Exception):
-    """Safe to show to the bot."""
-
-
-@dataclass
-class Creds:
-    user: str
-    password: str
-
-
-def _quote(name: str) -> str:
-    return '"' + name.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def split_id(msg_id: str) -> tuple[str, str]:
-    folder, _, uid = str(msg_id).rpartition("#")
-    if not folder or not uid.isdigit():
-        raise MailboxError(f"not a message id: {str(msg_id)[:80]} (use the ids mail_search gives)")
-    return folder, uid
-
-
-def _check(typ: str, data: Any, what: str) -> Any:
-    if typ != "OK":
-        detail = b" ".join(d for d in (data or []) if isinstance(d, bytes)).decode(errors="replace")[:200]
-        raise MailboxError(f"{what} failed: {detail or typ}")
-    return data
-
-
-class Mailbox:
-    """One connection to Bridge, for one tool call: `with Mailbox(settings, creds) as mb:`."""
+class Mailbox(OrganiseMixin):
+    """One logged-in connection to Bridge."""
 
     def __init__(self, settings: MailSettings, creds: Creds) -> None:
         from .tlspin import pinned_context
@@ -78,72 +56,157 @@ class Mailbox:
         self.settings, self.creds = settings, creds
         self.ctx = pinned_context(settings.cert_pem)
         self.imap: imaplib.IMAP4 | None = None
+        self._names: tuple[float, list[str]] | None = None
 
-    def __enter__(self) -> "Mailbox":
+    def open(self) -> Mailbox:
         imap = imaplib.IMAP4(self.settings.host, self.settings.port, timeout=30)
         imap.starttls(ssl_context=self.ctx)
         imap.login(self.creds.user, self.creds.password)
         self.imap = imap
         return self
 
-    def __exit__(self, *exc: Any) -> None:
+    def close(self) -> None:
         try:
-            self.imap.logout()  # type: ignore[union-attr]
+            if self.imap is not None:
+                self.imap.logout()
         except Exception:
             pass
+        self.imap = None
+
+    def __enter__(self) -> Mailbox:
+        return self.open()
+
+    def __exit__(self, *exc: Any) -> None:
+        self.close()
 
     @property
     def i(self) -> imaplib.IMAP4:
         assert self.imap is not None
         return self.imap
 
-    # ---- looking ----------------------------------------------------------------------------
+    # ---- folders and finding messages -------------------------------------------------------
 
     def folder_names(self) -> list[str]:
+        if self._names is not None and self._names[0] > time.monotonic():
+            return self._names[1]
         names = []
-        for raw in _check(*self.i.list(), "listing folders"):
+        for raw in check(*self.i.list(), "listing folders"):
             m = re.search(rb'\) (?:"[^"]*"|NIL) (.+)$', raw if isinstance(raw, bytes) else b"")
             if m:
                 names.append(m.group(1).decode(errors="replace").strip().strip('"'))
+        self._names = (time.monotonic() + FOLDERS_S, names)
         return names
 
-    def folders(self) -> list[dict[str, Any]]:
+    def _forget_folders(self) -> None:
+        self._names = None
+
+    def folders(self, counts: bool = True) -> list[dict[str, Any]]:
         out = []
         for name in self.folder_names():
-            typ, data = self.i.status(_quote(name), "(MESSAGES UNSEEN)")
-            counts = dict(re.findall(rb"(MESSAGES|UNSEEN) (\d+)", data[0] or b"")) if typ == "OK" and data else {}
             kind = "label" if name.startswith("Labels/") else "system" if name in SYSTEM else "folder"
-            out.append({"name": name, "kind": kind, "messages": int(counts.get(b"MESSAGES", 0)), "unread": int(counts.get(b"UNSEEN", 0))})
+            entry: dict[str, Any] = {"name": name, "kind": kind}
+            if counts:
+                typ, data = self.i.status(quote(name), "(MESSAGES UNSEEN)")
+                found = dict(re.findall(rb"(MESSAGES|UNSEEN) (\d+)", data[0] or b"")) if typ == "OK" and data else {}
+                entry |= {"messages": int(found.get(b"MESSAGES", 0)), "unread": int(found.get(b"UNSEEN", 0))}
+            out.append(entry)
         return out
 
     def _select(self, folder: str, write: bool = False) -> None:
         if folder not in self.folder_names():
-            raise MailboxError(f"no folder called {folder[:80]} (mail_folders lists them)")
-        _check(*self.i.select(_quote(folder), readonly=not write), f"opening {folder}")
+            self._forget_folders()  # made in Proton Mail a moment ago?
+            if folder not in self.folder_names():
+                raise MailboxError(f"no folder called {folder[:80]} (mail_folders lists them)")
+        check(*self.i.select(quote(folder), readonly=not write), f"opening {folder}")
 
-    def search(self, folder: str = "INBOX", sender: str = "", to: str = "", subject: str = "", text: str = "",
-               days: int = 30, unread: bool = False, starred: bool = False, limit: int = 20) -> list[dict[str, Any]]:
-        self._select(folder)
-        crit: list[str] = ["SINCE", time.strftime("%d-%b-%Y", time.gmtime(time.time() - max(1, min(days, 3650)) * 86400))]
+    def existing(self, uids: list[str]) -> list[str]:
+        """Which of these UIDs are in the open folder."""
+        if not uids:
+            return []
+        _, data = self.i.uid("SEARCH", None, "UID", ",".join(uids))
+        there = set((data[0] or b"").decode().split())
+        return [u for u in uids if u in there]
+
+    def _headers(self, uids: list[str], fields: str) -> list[tuple[str, str, Message]]:
+        """(uid, flags and size, headers) for many messages in one FETCH."""
+        if not uids:
+            return []
+        _, parts = self.i.uid("FETCH", ",".join(uids), f"(UID FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS ({fields})])")
+        out = []
+        for part in parts:
+            if isinstance(part, tuple) and (m := re.search(rb"UID (\d+)", part[0])):
+                out.append((m.group(1).decode(), part[0].decode(errors="replace"),
+                            email.message_from_bytes(part[1], policy=email.policy.default)))
+        return out
+
+    def message_ids(self, uids: list[str]) -> dict[str, str]:
+        return {uid: str(h.get("Message-ID", "")).strip() for uid, _, h in self._headers(uids, "MESSAGE-ID")}
+
+    def uids_of(self, mids: list[str]) -> list[str]:
+        """UIDs in the open folder of messages with these Message-IDs."""
+        found: list[str] = []
+        for mid in dict.fromkeys(m for m in mids if m):
+            _, data = self.i.uid("SEARCH", None, "HEADER", "Message-ID", quote(mid))
+            found += [u for u in (data[0] or b"").decode().split() if u not in found]
+        return found
+
+    # ---- looking ----------------------------------------------------------------------------
+
+    def _criteria(self, sender: str, to: str, subject: str, text: str, days: int, unread: bool, starred: bool) -> list[str]:
+        crit = ["SINCE", time.strftime("%d-%b-%Y", time.gmtime(time.time() - max(1, min(days, 3650)) * 86400))]
         for key, value in (("FROM", sender), ("TO", to), ("SUBJECT", subject), ("TEXT", text)):
             if value:
-                crit += [key, _quote(str(value)[:100])]
-        crit += (["UNSEEN"] if unread else []) + (["FLAGGED"] if starred else [])
-        _, data = self.i.uid("SEARCH", None, *crit)
-        uids = (data[0] or b"").split()[-max(1, min(limit, MAX_RESULTS)):]
-        return list(reversed([self._summary(folder, u.decode()) for u in uids]))
+                crit += [key, quote(str(value)[:100])]
+        return crit + (["UNSEEN"] if unread else []) + (["FLAGGED"] if starred else [])
 
-    def _summary(self, folder: str, uid: str) -> dict[str, Any]:
-        _, parts = self.i.uid("FETCH", uid, "(FLAGS RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE)])")
-        meta = next((p for p in parts if isinstance(p, tuple)), None)
-        if meta is None:
-            raise MailboxError(f"no message {folder}#{uid}")
-        head = email.message_from_bytes(meta[1], policy=email.policy.default)
-        flags = meta[0].decode(errors="replace")
+    def matching(self, folder: str = "INBOX", sender: str = "", to: str = "", subject: str = "", text: str = "",
+                 days: int = 30, unread: bool = False, starred: bool = False) -> list[str]:
+        """Every matching UID in `folder`, oldest first."""
+        self._select(folder)
+        _, data = self.i.uid("SEARCH", None, *self._criteria(sender, to, subject, text, days, unread, starred))
+        return [u.decode() for u in (data[0] or b"").split()]
+
+    def search(self, folder: str = "INBOX", limit: int = 20, page: int = 1, **query: Any) -> dict[str, Any]:
+        uids = self.matching(folder, **query)
+        limit, page = max(1, min(int(limit), MAX_RESULTS)), max(1, int(page))
+        newest = list(reversed(uids))[(page - 1) * limit: page * limit]
+        rows = {uid: self._row(folder, uid, flags, h) for uid, flags, h in self._headers(newest, "FROM TO CC SUBJECT DATE")}
+        return {"messages": [rows[u] for u in newest if u in rows], "total": len(uids), "page": page,
+                "more": page * limit < len(uids)}
+
+    @staticmethod
+    def _row(folder: str, uid: str, flags: str, head: Message) -> dict[str, Any]:
         size = re.search(r"RFC822\.SIZE (\d+)", flags)
         return {"id": f"{folder}#{uid}", "from": str(head.get("From", "")), "to": str(head.get("To", "")),
                 "cc": str(head.get("Cc", "")), "subject": str(head.get("Subject", "")), "date": str(head.get("Date", "")),
                 "unread": "\\Seen" not in flags, "starred": "\\Flagged" in flags, "size": int(size.group(1)) if size else None}
+
+    def senders(self, folder: str = "INBOX", days: int = 30, limit: int = 20) -> list[dict[str, Any]]:
+        """Who sends the most mail to `folder`: the first thing to look at when tidying."""
+        uids = self.matching(folder, days=days)[-2000:]
+        counts: Counter[str] = Counter()
+        unread: Counter[str] = Counter()
+        for i in range(0, len(uids), 200):
+            for _, flags, head in self._headers(uids[i:i + 200], "FROM"):
+                who = parseaddr(str(head.get("From", "")))[1].lower() or "(unknown)"
+                counts[who] += 1
+                unread[who] += "\\Seen" not in flags
+        return [{"sender": s, "messages": n, "unread": unread[s]} for s, n in counts.most_common(max(1, min(limit, 100)))]
+
+    def thread(self, msg_id: str) -> list[dict[str, Any]]:
+        """The conversation a message belongs to, from All Mail, oldest first."""
+        msg = self.fetch(msg_id)
+        ids = re.findall(r"<[^<>\s]+>", " ".join(str(msg.get(h, "")) for h in ("References", "In-Reply-To", "Message-ID")))
+        ids = list(dict.fromkeys(ids))[-20:]
+        where = "All Mail" if "All Mail" in self.folder_names() else split_id(msg_id)[0]
+        self._select(where)
+        uids: list[str] = []
+        for mid in ids:
+            for header in ("Message-ID", "References"):
+                _, data = self.i.uid("SEARCH", None, "HEADER", header, quote(mid))
+                uids += [u for u in (data[0] or b"").decode().split() if u not in uids]
+        rows = [self._row(where, uid, flags, h) for uid, flags, h in self._headers(uids[:50], "FROM TO CC SUBJECT DATE")]
+        return sorted(rows, key=lambda r: _when(r["date"]))
 
     def fetch(self, msg_id: str) -> Message:
         folder, uid = split_id(msg_id)
@@ -157,12 +220,14 @@ class Mailbox:
     def read(self, msg_id: str, mark_read: bool = False) -> dict[str, Any]:
         msg = self.fetch(msg_id)
         if mark_read:
-            self.flag(msg_id, "read", True)
+            self.flag_many([msg_id], "read", True)
         attachments = [{"name": p.get_filename() or "(unnamed)", "type": p.get_content_type(),
                         "size": len(p.get_payload(decode=True) or b"")} for p in msg.walk() if p.get_filename()]
         body = text_of(msg)
+        extra = {k: str(msg[h]) for k, h in (("reply_to", "Reply-To"), ("list_unsubscribe", "List-Unsubscribe"),
+                                             ("list_id", "List-Id")) if msg.get(h)}
         return {"id": msg_id, "from": str(msg.get("From", "")), "to": str(msg.get("To", "")), "cc": str(msg.get("Cc", "")),
-                "subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", "")),
+                "subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", "")), **extra,
                 "text": body[:MAX_TEXT], "truncated": len(body) > MAX_TEXT, "attachments": attachments}
 
     def attachment_text(self, msg_id: str, name: str) -> str:
@@ -174,79 +239,70 @@ class Mailbox:
                 return data.decode(part.get_content_charset() or "utf-8", errors="replace")[:MAX_TEXT]
         raise MailboxError(f"no attachment called {name[:80]}")
 
-    # ---- organising -------------------------------------------------------------------------
 
-    def move(self, msg_id: str, to: str) -> str:
-        folder, uid = split_id(msg_id)
-        if to.startswith("Labels/") or to in ("All Mail", "Starred"):
-            raise MailboxError(f"{to} isn't a folder you can move to; use mail_label for labels and mail_flag to star")
-        if to not in self.folder_names():
-            raise MailboxError(f"no folder called {to[:80]} (mail_folders lists them; mail_folder_create makes one)")
-        self._select(folder, write=True)
-        _check(*self.i.uid("MOVE", uid, _quote(to)), f"moving to {to}")
-        return to
+class Pool:
+    """The one connection the admin's calls share, a call at a time (imaplib isn't thread-safe)."""
 
-    def flag(self, msg_id: str, flag: str, on: bool) -> None:
-        imap_flag = {"read": "\\Seen", "starred": "\\Flagged"}.get(flag)
-        if imap_flag is None:
-            raise MailboxError("flag: read or starred")
-        folder, uid = split_id(msg_id)
-        self._select(folder, write=True)
-        _check(*self.i.uid("STORE", uid, "+FLAGS.SILENT" if on else "-FLAGS.SILENT", f"({imap_flag})"), "flagging")
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._mb: Mailbox | None = None
+        self._key: tuple[Any, ...] | None = None
+        self._used = 0.0
 
-    def label(self, msg_id: str, name: str, on: bool) -> None:
-        target = name if name.startswith("Labels/") else f"Labels/{name}"
-        if target not in self.folder_names():
-            raise MailboxError(f"no label called {name[:60]} (mail_folder_create with kind=label makes one)")
-        folder, uid = split_id(msg_id)
-        if on:
-            self._select(folder, write=True)
-            _check(*self.i.uid("COPY", uid, _quote(target)), "labelling")
-            return
-        # Unlabel: find the same message under the label, by its Message-ID, and take it out there.
-        mid = str(self.fetch(msg_id).get("Message-ID", "")).strip()
-        self._select(target, write=True)
-        _, data = self.i.uid("SEARCH", None, "HEADER", "Message-ID", _quote(mid)) if mid else ("OK", [b""])
-        found = (data[0] or b"").split()
-        if not found:
-            raise MailboxError("that message doesn't have the label")
-        _check(*self.i.uid("STORE", found[0].decode(), "+FLAGS.SILENT", "(\\Deleted)"), "unlabelling")
-        self.i.expunge()  # in a label, this removes the label; the message itself stays
+    def run(self, settings: MailSettings, creds: Creds, work: Callable[[Mailbox], Any]) -> Any:
+        key = (settings.host, settings.port, settings.cert_pem, creds)
+        with self._lock:
+            for attempt in (1, 2):
+                mb = self._ready(key, settings, creds)
+                try:
+                    result = work(mb)
+                except MailboxError:
+                    self._used = time.monotonic()  # the bot's mistake; the connection is fine
+                    raise
+                except (imaplib.IMAP4.abort, OSError):
+                    self._drop()
+                    if attempt == 2:
+                        raise
+                    continue  # Bridge restarted or the connection timed out: once more, fresh
+                except BaseException:
+                    self._drop()
+                    raise
+                self._used = time.monotonic()
+                return result
+        raise AssertionError("unreachable")
 
-    def create(self, name: str, kind: str = "folder") -> str:
-        if not NAME_RE.fullmatch(name) or name.strip() != name:
-            raise MailboxError("name: up to 60 letters, digits, spaces and . & ( ) ' + , - _")
-        full = ("Labels/" if kind == "label" else "Folders/") + name
-        if full in self.folder_names():
-            return full
-        _check(*self.i.create(_quote(full)), f"making {full}")
-        return full
+    def _ready(self, key: tuple[Any, ...], settings: MailSettings, creds: Creds) -> Mailbox:
+        idle = time.monotonic() - self._used
+        if self._mb is not None and (self._key != key or idle > IDLE_S):
+            self._drop()
+        if self._mb is not None and idle > CHECK_S:
+            try:
+                self._mb.i.noop()
+            except Exception:
+                self._drop()
+        if self._mb is None:
+            self._mb, self._key = Mailbox(settings, creds).open(), key
+        return self._mb
 
-    def rename(self, old: str, new: str) -> str:
-        if old in SYSTEM or not old.startswith(("Folders/", "Labels/")):
-            raise MailboxError("only your own folders and labels can be renamed")
-        if not NAME_RE.fullmatch(new):
-            raise MailboxError("name: up to 60 letters, digits, spaces and . & ( ) ' + , - _")
-        full = old.split("/", 1)[0] + "/" + new
-        _check(*self.i.rename(_quote(old), _quote(full)), "renaming")
-        return full
+    def _drop(self) -> None:
+        if self._mb is not None:
+            self._mb.close()
+        self._mb = self._key = None
 
-    def delete_folder(self, name: str) -> None:
-        """The folder or label goes; Proton keeps its messages (a folder's move to the inbox)."""
-        if name in SYSTEM or not name.startswith(("Folders/", "Labels/")):
-            raise MailboxError("only your own folders and labels can be deleted")
-        _check(*self.i.delete(_quote(name)), "deleting")
+    def close(self) -> None:
+        with self._lock:
+            self._drop()
 
-    # ---- writing ----------------------------------------------------------------------------
 
-    def save_draft(self, msg: EmailMessage) -> None:
-        _check(*self.i.append("Drafts", "(\\Draft \\Seen)", imaplib.Time2Internaldate(time.time()), msg.as_bytes()), "saving the draft")
+def _when(date: str) -> float:
+    """A Date header as a timestamp; one with no time zone ("-0000") counts as UTC, not local time."""
+    from datetime import UTC
 
-    def send(self, msg: EmailMessage) -> None:
-        with smtplib.SMTP(self.settings.host, SMTP_PORT, timeout=30) as smtp:
-            smtp.starttls(context=self.ctx)
-            smtp.login(self.creds.user, self.creds.password)
-            smtp.send_message(msg)
+    try:
+        when = parsedate_to_datetime(date)
+    except (TypeError, ValueError):
+        return 0.0
+    return (when if when.tzinfo else when.replace(tzinfo=UTC)).timestamp()
 
 
 def text_of(msg: Message) -> str:

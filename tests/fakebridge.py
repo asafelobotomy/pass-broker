@@ -121,7 +121,7 @@ class FakeBridge:
     def _command(self, io, tag, cmd, args, literal, send):
         ok = f"{tag} OK done\r\n"
         if cmd == "CAPABILITY":
-            send(f"* CAPABILITY IMAP4rev1 {'AUTH=PLAIN MOVE' if io['tls'] else 'STARTTLS LOGINDISABLED'}\r\n" + ok)
+            send(f"* CAPABILITY IMAP4rev1 {'AUTH=PLAIN MOVE UIDPLUS' if io['tls'] else 'STARTTLS LOGINDISABLED'}\r\n" + ok)
         elif cmd == "STARTTLS":
             send(f"{tag} OK begin TLS\r\n")
             io["conn"] = self.ctx.wrap_socket(io["conn"], server_side=True)
@@ -211,6 +211,10 @@ class FakeBridge:
                 self.add(args[1], m["raw"], m["flags"])
                 if sub == "MOVE":
                     box.remove(m)
+            send(ok)
+        elif sub == "EXPUNGE":  # UIDPLUS: only these
+            gone = {m["uid"] for m in find(args[0]) if "\\Deleted" in m["flags"]}
+            box[:] = [m for m in box if m["uid"] not in gone]
             send(ok)
         elif sub == "STORE":
             change = set(args[2].strip("()").split())

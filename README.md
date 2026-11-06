@@ -405,9 +405,9 @@ PC, the admin can:
 
 | | |
 |---|---|
-| Look | `mail_folders` (folders and labels, unread counts), `mail_search` (by sender, recipient, subject, words, date, unread, starred) |
-| Read | `mail_read` (as text, attachments listed; stays unread unless asked), `mail_attachment` (text attachments) |
-| Organise | `mail_move` (folders, Archive, Spam, back to the inbox, Trash), `mail_flag` (read, starred), `mail_label` |
+| Look | `mail_folders` (folders and labels, unread counts), `mail_search` (by sender, recipient, subject, words, date, unread, starred; a page at a time), `mail_senders` (who sends the most) |
+| Read | `mail_read` (as text, attachments listed, reply-to and unsubscribe links; stays unread unless asked), `mail_thread` (the whole conversation), `mail_attachment` (text attachments) |
+| Organise | `mail_move` (folders, Archive, Spam, back to the inbox, Trash), `mail_flag` (read, starred), `mail_label`, `mail_apply` (one of those to everything a search matches, up to 500), `mail_undo` (puts the last moved batch back) |
 | Folders | `mail_folder_create`, `mail_folder_rename`, `mail_folder_delete` (asks you; Proton keeps the mail) |
 | Write | `mail_draft` (saved in Drafts for you), `mail_send` (new, reply, reply all, forward) |
 
@@ -417,6 +417,8 @@ What stays yours:
 - **Nothing is erased for good**: deleting moves to Trash, and nothing empties it. Deleting a
   folder asks you. At most 500 messages changed a day.
 - It never sees Bridge's password, and the audit log records each action without mail contents.
+- Its calls share one connection to Bridge, taking turns, so a busy admin is quick and nothing it
+  does can interleave; a dropped connection is reopened once, by itself.
 - Mail is written by its senders, so everything it reads comes marked as untrusted data: an email
   is the easiest way for a stranger to slip instructions to a bot.
 
