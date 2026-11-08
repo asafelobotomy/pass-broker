@@ -33,7 +33,7 @@ h1{{font-size:1.3rem;margin:0 0 12px}} p{{color:var(--muted)}} .bad{{color:var(-
 label{{display:block;font-weight:600;margin:16px 0 6px}}
 input{{width:100%;box-sizing:border-box;font:inherit;padding:10px 12px;border-radius:8px;border:1px solid #8886;background:transparent;color:inherit}}
 #code{{font:600 1.4rem ui-monospace,monospace;letter-spacing:.15em;text-transform:uppercase;text-align:center}}
-.row{{display:flex;gap:10px;margin-top:22px}} button{{flex:1;font:inherit;padding:10px;border-radius:8px;border:0;cursor:pointer}}
+.row{{display:flex;flex-direction:row-reverse;gap:10px;margin-top:22px}} button{{flex:1;font:inherit;padding:10px;border-radius:8px;border:0;cursor:pointer}}
 .ok{{background:var(--accent);color:#fff}} .no{{background:#8883;color:inherit}}
 </style><main>{body}</main></html>"""
     return HTMLResponse(
@@ -137,7 +137,7 @@ You'd still approve each password fill on your PC.</p>
 <input id=code name=code autocomplete=off autocapitalize=characters spellcheck=false maxlength=9 placeholder="XXXX-XXXX" autofocus required>
 <label for=name>Name this connection</label>
 <input id=name name=name value="{guess}" maxlength=32>
-<div class=row><button class=no name=action value=deny formnovalidate>Deny</button><button class=ok name=action value=allow>Connect</button></div>
+<div class=row><button class=ok name=action value=allow>Connect</button><button class=no name=action value=deny formnovalidate>Deny</button></div>
 </form>"""
         )
 

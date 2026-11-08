@@ -6,6 +6,8 @@ minor version (0.x.0) can change how things work, and a patch (0.x.y) only fixes
 
 ## Unreleased
 
+- **Enter connects**: pressing Enter after typing the code on the consent page now connects
+  instead of denying (Connect is the form's first button).
 - **Each bot has one email address**: the first alias a bot gets (new `email_address` tool, or
   `create_login` with `email_alias`) stays its own, is saved with every account it makes and is
   listed in the wizard. Email codes for those accounts come only from mail sent to that alias.

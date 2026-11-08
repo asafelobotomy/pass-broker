@@ -172,6 +172,20 @@ async def test_full_flow_wrong_codes_refresh_and_revoke(broker):
         assert dead.status_code == 400
 
 
+def test_enter_after_typing_the_code_connects(broker):
+    """Pressing Enter submits with the form's first button: it must be Connect, not Deny."""
+    import re
+
+    base = broker["base"]
+    with httpx2.Client() as http:
+        client_id = _register(http, base)
+        _, challenge = _pkce()
+        req = _authorize(http, base, client_id, challenge)
+        page = http.get(f"{base}/consent", params={"req": req}).text
+    buttons = re.findall(r"<button[^>]*value=(\w+)", page)
+    assert buttons == ["allow", "deny"]
+
+
 def test_deny_and_attempt_limit(broker):
     base, notes = broker["base"], broker["notes"]
     with httpx2.Client() as http:
