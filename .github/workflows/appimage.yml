@@ -55,7 +55,7 @@ jobs:
           [ "$py" = "$want" ] && [ "$rs" = "$want" ] || { echo "::error::bump pyproject.toml and wizard/Cargo.toml to $want before tagging"; exit 1; }
       # uv is pinned: it picks the exact Python build that goes into the AppImage. Its own
       # cache is off for tag builds ("auto").
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           version: "0.12.23"
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
